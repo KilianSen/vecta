@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"anymcp/internal/metrics"
-	"anymcp/internal/proto"
-	"anymcp/internal/registry"
+	"vecta/internal/metrics"
+	"vecta/internal/proto"
+	"vecta/internal/registry"
 )
 
 func twoServers763(a, b *backend) []registry.Server {
@@ -163,7 +163,7 @@ func TestRateLimitRefusesConnections(t *testing.T) {
 	_ = io.EOF
 	var sb strings.Builder
 	m.Write(&sb)
-	if !strings.Contains(sb.String(), `anymcp_connections_rejected_total{reason="rate"} 1`) {
+	if !strings.Contains(sb.String(), `vecta_connections_rejected_total{reason="rate"} 1`) {
 		t.Fatalf("metric missing:\n%s", sb.String())
 	}
 }

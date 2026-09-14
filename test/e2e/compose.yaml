@@ -1,17 +1,17 @@
 # End-to-end test stack: gateway and 8 real servers. Six register themselves
-# with the anymcp server jar (five as a Java agent — one of them hidden — and one
+# with the vecta server jar (five as a Java agent — one of them hidden — and one
 # in wrapper mode behind the guard), two are static in the gateway config.
 # Normally driven by test/e2e/run.sh, which copies this directory to the Docker
 # host and runs, there:
 #   docker compose up -d --build
 #   sh tune-paper.sh
 # Tear down on the Docker host with: docker compose down -v
-name: anymcp-test
+name: vecta-test
 
 x-mc: &mc
   image: itzg/minecraft-server:latest
   restart: unless-stopped
-  labels: [anymcp-test=true]
+  labels: [vecta-test=true]
   environment: &mcenv
     EULA: "TRUE"
     ONLINE_MODE: "FALSE"
@@ -20,18 +20,18 @@ x-mc: &mc
     VIEW_DISTANCE: "4"
     SPAWN_PROTECTION: "0"
     LEVEL_TYPE: minecraft:flat
-    ANYMCP_GATEWAY: http://gateway:8080
+    VECTA_GATEWAY: http://gateway:8080
 
-x-anymcp: &anymcp
+x-vecta: &vecta
   build: .
-  image: anymcp-test/anymcp:e2e
-  labels: [anymcp-test=true]
+  image: vecta-test/vecta:e2e
+  labels: [vecta-test=true]
   restart: on-failure
 
 services:
   gateway:
-    <<: *anymcp
-    command: ["gateway", "-config", "/etc/anymcp/gateway.json", "-v"]
+    <<: *vecta
+    command: ["gateway", "-config", "/etc/vecta/gateway.json", "-v"]
     ports:
       - "35565:25565"
       - "38080:8080"
@@ -50,7 +50,7 @@ services:
           - forge-pack.play.test
           - paper-plugin.play.test
 
-  # L: Paper 1.8.8 on Java 8. anymcp.jar in wrapper mode starts the Paper jar
+  # L: Paper 1.8.8 on Java 8. vecta.jar in wrapper mode starts the Paper jar
   # (detected in /data) and guards it: the guard takes port 25565, Paper moves
   # to 25566, and only connections signed by the gateway get through.
   mc-paper-legacy:
@@ -62,16 +62,16 @@ services:
       VERSION: "1.8.8"
       MOTD: Paper legacy
       SERVER_PORT: "25566"
-      CUSTOM_JAR_EXEC: "-jar /anymcp/anymcp.jar"
-      ANYMCP_TOKEN: tok-l
-      ANYMCP_SERVER_ID: paper-legacy
-      ANYMCP_NAME: Paper 1.8.8
-      ANYMCP_ADDRESS: mc-paper-legacy:25565
-      ANYMCP_GUARD: "true"
-      ANYMCP_GUARD_LISTEN: 0.0.0.0:25565
-      ANYMCP_GUARD_JOIN_HINT: play.test
+      CUSTOM_JAR_EXEC: "-jar /vecta/vecta.jar"
+      VECTA_TOKEN: tok-l
+      VECTA_SERVER_ID: paper-legacy
+      VECTA_NAME: Paper 1.8.8
+      VECTA_ADDRESS: mc-paper-legacy:25565
+      VECTA_GUARD: "true"
+      VECTA_GUARD_LISTEN: 0.0.0.0:25565
+      VECTA_GUARD_JOIN_HINT: play.test
     volumes:
-      - ./anymcp-jar:/anymcp:ro
+      - ./vecta-jar:/vecta:ro
 
   # A: Paper 1.21.11, static in gateway config
   mc-paper-a:
@@ -92,13 +92,13 @@ services:
       VERSION: "1.21.4"
       MODRINTH_PROJECTS: "viaversion,viabackwards,viarewind"
       MOTD: Paper Via
-      JVM_OPTS: -javaagent:/anymcp/anymcp.jar
-      ANYMCP_TOKEN: tok-b
-      ANYMCP_SERVER_ID: paper-via
-      ANYMCP_NAME: Paper 1.21.4 + Via
-      ANYMCP_ADDRESS: mc-paper-via:25565
+      JVM_OPTS: -javaagent:/vecta/vecta.jar
+      VECTA_TOKEN: tok-b
+      VECTA_SERVER_ID: paper-via
+      VECTA_NAME: Paper 1.21.4 + Via
+      VECTA_ADDRESS: mc-paper-via:25565
     volumes:
-      - ./anymcp-jar:/anymcp:ro
+      - ./vecta-jar:/vecta:ro
 
   # C: Vanilla 1.20.1, static in gateway config
   mc-vanilla-old:
@@ -119,15 +119,15 @@ services:
       MEMORY: 1500M
       MODRINTH_PROJECTS: "fabric-api,appleskin,lithium"
       MOTD: Fabric pack
-      JVM_OPTS: -javaagent:/anymcp/anymcp.jar
-      ANYMCP_TOKEN: tok-d
-      ANYMCP_SERVER_ID: fabric-pack
-      ANYMCP_NAME: Fabric 1.21.1 pack
-      ANYMCP_ADDRESS: mc-fabric:25565
-      ANYMCP_REQUIRED_CLIENT_MODS: appleskin
+      JVM_OPTS: -javaagent:/vecta/vecta.jar
+      VECTA_TOKEN: tok-d
+      VECTA_SERVER_ID: fabric-pack
+      VECTA_NAME: Fabric 1.21.1 pack
+      VECTA_ADDRESS: mc-fabric:25565
+      VECTA_REQUIRED_CLIENT_MODS: appleskin
     volumes:
       - fabric-data:/data
-      - ./anymcp-jar:/anymcp:ro
+      - ./vecta-jar:/vecta:ro
 
   # E: NeoForge 1.21.1 modpack, jar (agent mode via user_jvm_args.txt)
   mc-neoforge:
@@ -139,14 +139,14 @@ services:
       MEMORY: 2G
       MODRINTH_PROJECTS: "jei"
       MOTD: NeoForge pack
-      JVM_OPTS: -javaagent:/anymcp/anymcp.jar
-      ANYMCP_TOKEN: tok-e
-      ANYMCP_SERVER_ID: neo-pack
-      ANYMCP_NAME: NeoForge 1.21.1 pack
-      ANYMCP_ADDRESS: mc-neoforge:25565
+      JVM_OPTS: -javaagent:/vecta/vecta.jar
+      VECTA_TOKEN: tok-e
+      VECTA_SERVER_ID: neo-pack
+      VECTA_NAME: NeoForge 1.21.1 pack
+      VECTA_ADDRESS: mc-neoforge:25565
     volumes:
       - neoforge-data:/data
-      - ./anymcp-jar:/anymcp:ro
+      - ./vecta-jar:/vecta:ro
 
   # P: Paper 1.21.4 + Via, registered by the jar as a hidden server (reachable as
   # paper-plugin.play.test and a transfer target only). Exercises the jar's
@@ -159,14 +159,14 @@ services:
       VERSION: "1.21.4"
       MODRINTH_PROJECTS: "viaversion,viabackwards"
       MOTD: Paper hidden
-      JVM_OPTS: -javaagent:/anymcp/anymcp.jar
-      ANYMCP_TOKEN: tok-plugin
-      ANYMCP_SERVER_ID: paper-plugin
-      ANYMCP_NAME: Paper hidden
-      ANYMCP_ADDRESS: mc-paper-plugin:25565
-      ANYMCP_HIDDEN: "true"
+      JVM_OPTS: -javaagent:/vecta/vecta.jar
+      VECTA_TOKEN: tok-plugin
+      VECTA_SERVER_ID: paper-plugin
+      VECTA_NAME: Paper hidden
+      VECTA_ADDRESS: mc-paper-plugin:25565
+      VECTA_HIDDEN: "true"
     volumes:
-      - ./anymcp-jar:/anymcp:ro
+      - ./vecta-jar:/vecta:ro
 
   # F: Forge 1.20.1 pack with a both-sides mod, jar (agent mode)
   mc-forge:
@@ -178,14 +178,14 @@ services:
       MEMORY: 2G
       MODRINTH_PROJECTS: "waystones,balm"
       MOTD: Forge pack
-      JVM_OPTS: -javaagent:/anymcp/anymcp.jar
-      ANYMCP_TOKEN: tok-f
-      ANYMCP_SERVER_ID: forge-pack
-      ANYMCP_NAME: Forge 1.20.1 pack
-      ANYMCP_ADDRESS: mc-forge:25565
+      JVM_OPTS: -javaagent:/vecta/vecta.jar
+      VECTA_TOKEN: tok-f
+      VECTA_SERVER_ID: forge-pack
+      VECTA_NAME: Forge 1.20.1 pack
+      VECTA_ADDRESS: mc-forge:25565
     volumes:
       - forge-data:/data
-      - ./anymcp-jar:/anymcp:ro
+      - ./vecta-jar:/vecta:ro
 
 volumes:
   fabric-data:

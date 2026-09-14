@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"anymcp/internal/proto"
+	"vecta/internal/proto"
 )
 
 // lobbyRoute is the cookie route that opens the gateway menu. "lobby" is a

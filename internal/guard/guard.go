@@ -1,4 +1,4 @@
-// Package guard implements anymcp's signed PROXY protocol v2 header. The
+// Package guard implements vecta's signed PROXY protocol v2 header. The
 // gateway attaches it to connections to guarded backends; the guard in the
 // universal server jar verifies it and refuses everything else, so players
 // cannot bypass the gateway. Wire format: docs/guard-protocol.md.
@@ -36,8 +36,8 @@ const (
 	famUnspec   = 0x00
 	famTCP4     = 0x11
 	famTCP6     = 0x21
-	macContext  = "anymcp-guard-v1"
-	keyContext  = "anymcp-guard-key-v1:"
+	macContext  = "vecta-guard-v1"
+	keyContext  = "vecta-guard-key-v1:"
 )
 
 var signature = []byte("\r\n\r\n\x00\r\nQUIT\n")

@@ -12,7 +12,7 @@ import (
 
 // CookieKey is the identifier under which the route cookie is stored on the
 // client across a transfer.
-const CookieKey = "anymcp:route"
+const CookieKey = "vecta:route"
 
 // signRoute produces "v1|server|player|expiry|sig". Binding the player name
 // stops a cookie from being reused by someone else.

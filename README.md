@@ -1,15 +1,15 @@
-# anymcp
+# VectaMine
 
 One public address for many independent Minecraft Java servers: any version,
 vanilla, plugin or modded. Players connect to `play.example.com` and get
 matched to a compatible server automatically, or pick one. Servers register
-and deregister themselves at runtime. Owners just add the anymcp server jar,
+and deregister themselves at runtime. Owners just add the vecta server jar,
 which works on any loader and version, and can guard the server so it's only
 reachable through the gateway.
 
 ```
-players ──TCP──► NPM stream :25565 ──► anymcp gateway :25565 ──► backend servers (optional guard)
-owners' server jar / agent / plugin ──HTTPS──► NPM proxy host ──► anymcp API :8080
+players ──TCP──► NPM stream :25565 ──► vecta gateway :25565 ──► backend servers (optional guard)
+owners' server jar / agent / plugin ──HTTPS──► NPM proxy host ──► vecta API :8080
 ```
 
 ## How routing works
@@ -118,7 +118,7 @@ For each login it checks, in order:
      personalized MOTD depend on it.
 3. **NPM → Proxy Hosts:** `mc-api.example.com` → gateway `:8080`, with SSL.
    This serves the owner API, the public server list page and `/metrics`.
-4. **Run the gateway:** `anymcp gateway -config gateway.json`
+4. **Run the gateway:** `vecta gateway -config gateway.json`
    (see [examples/gateway.json](examples/gateway.json)). Set a fixed
    `cookieSecret` and a persistent `dataFile` path.
 
@@ -140,15 +140,15 @@ protocol on the backend (Paper: `proxies.proxy-protocol: true` in
 | File | Purpose |
 |---|---|
 | [Dockerfile](Dockerfile) | Multi-stage build to a static binary on distroless `nonroot`, with a built-in health check. Multi-arch via buildx. |
-| [deploy/compose.yaml](deploy/compose.yaml) | The gateway: config mount, persistent `anymcp-data` volume, read-only root filesystem, dropped capabilities, log rotation. |
+| [deploy/compose.yaml](deploy/compose.yaml) | The gateway: config mount, persistent `vecta-data` volume, read-only root filesystem, dropped capabilities, log rotation. |
 | [deploy/gateway.json](deploy/gateway.json) | Config template using `${VAR}` placeholders. |
 | [deploy/.env.example](deploy/.env.example) | Domain, secrets, tokens and ports. |
-| [deploy/compose.server-example.yaml](deploy/compose.server-example.yaml) | Example backend: a Minecraft server with the anymcp server jar as a Java agent and the guard on. |
+| [deploy/compose.server-example.yaml](deploy/compose.server-example.yaml) | Example backend: a Minecraft server with the vecta server jar as a Java agent and the guard on. |
 | [deploy/agent.json](deploy/agent.json) | Config for the sidecar agent, if you use it instead of the jar. |
 
 ```
 cd deploy
-cp .env.example .env          # set ANYMCP_DOMAIN, ANYMCP_COOKIE_SECRET, ANYMCP_METRICS_TOKEN, ANYMCP_OWNER_TOKEN
+cp .env.example .env          # set VECTA_DOMAIN, VECTA_COOKIE_SECRET, VECTA_METRICS_TOKEN, VECTA_OWNER_TOKEN
 docker compose up -d --build
 docker compose ps             # STATUS shows (healthy) once the API answers
 ```
@@ -161,9 +161,9 @@ docker compose ps             # STATUS shows (healthy) once the API answers
   startup. A missing secret can't silently become empty.
 
 **Image:**
-- The default command is `gateway -config /etc/anymcp/gateway.json`.
-- `anymcp version` prints the build version; `anymcp healthcheck` is the
-  container health check. It reads `ANYMCP_HEALTH_URL` if you move `apiListen`.
+- The default command is `gateway -config /etc/vecta/gateway.json`.
+- `vecta version` prints the build version; `vecta healthcheck` is the
+  container health check. It reads `VECTA_HEALTH_URL` if you move `apiListen`.
 - It runs as uid 65532. `/data` is the working directory and volume, so relative
   `dataFile` paths persist there.
 
@@ -173,7 +173,7 @@ docker compose ps             # STATUS shows (healthy) once the API answers
 - **Container on the same Docker host:**
   1. Remove `ports`.
   2. Uncomment the `npm` network in `compose.yaml`.
-  3. Point NPM at `anymcp:25565` (stream) and `anymcp:8080` (proxy host).
+  3. Point NPM at `vecta:25565` (stream) and `vecta:8080` (proxy host).
 - **Real client IPs:** enable PROXY protocol on the stream and set
   `"acceptProxyProtocol": true`.
 
@@ -181,14 +181,14 @@ docker compose ps             # STATUS shows (healthy) once the API answers
 
 | Task | How |
 |---|---|
-| Upgrade | `git pull && docker compose up -d --build`, or set `ANYMCP_IMAGE` to a published tag and `docker compose pull && docker compose up -d`. |
-| Back up state | `docker run --rm -v anymcp_anymcp-data:/data -v "$PWD":/backup alpine cp /data/state.json /backup/` |
-| Publish an image | `docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION=1.0.0 -t registry.example.com/anymcp:1.0.0 --push .` |
+| Upgrade | `git pull && docker compose up -d --build`, or set `VECTA_IMAGE` to a published tag and `docker compose pull && docker compose up -d`. |
+| Back up state | `docker run --rm -v vecta_vecta-data:/data -v "$PWD":/backup alpine cp /data/state.json /backup/` |
+| Publish an image | `docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION=1.0.0 -t registry.example.com/vecta:1.0.0 --push .` |
 
 **Backend servers:**
-- On another host, put `anymcp.jar` next to
+- On another host, put `vecta.jar` next to
   [deploy/compose.server-example.yaml](deploy/compose.server-example.yaml)
-  and run it with `ANYMCP_TOKEN` and `ANYMCP_ADDRESS` set.
+  and run it with `VECTA_TOKEN` and `VECTA_ADDRESS` set.
 - Or add the jar to an existing server (see [For server owners](#for-server-owners)).
 
 ## Configuration reference (`gateway.json`)
@@ -210,8 +210,8 @@ rejected at startup.
 | `probeWindow` | `1500ms` | How long the 1.20.5+ lobby listens for brand and channels (again after the Fabric handshake). |
 | `pendingTTL` | `3m` | How long a remembered choice waits for the player to reconnect. |
 | `forgeModQuery` | false | Also query Forge 1.13–1.20.1 clients with an empty mod list when no backend channel data exists. |
-| `motd` | `anymcp gateway` | First line of the server-list MOTD. |
-| `dataFile` | `anymcp-state.json` (`"-"`: memory only) | Persists remembered routes, Forge rejections, sticky servers and IP→player for the MOTD. Written atomically every 30 s and on shutdown. |
+| `motd` | `vecta gateway` | First line of the server-list MOTD. |
+| `dataFile` | `vecta-state.json` (`"-"`: memory only) | Persists remembered routes, Forge rejections, sticky servers and IP→player for the MOTD. Written atomically every 30 s and on shutdown. |
 | `stickyTTL` | `720h` (negative: off) | How long a player's last server is remembered for sticky routing. |
 | `personalizedMotd` | false | Server-list second line becomes "Next join: X" or "Back to X · lobby.<domain> to switch", looked up by client IP. |
 | `rateLimit.perSecond` / `.burst` / `.maxConnectionsPerIp` | off | Per-IP token bucket and concurrent connection cap. Refused connections are closed before the handshake is parsed. |
@@ -227,16 +227,16 @@ rejected at startup.
 Get an owner token from the gateway admin. There are three ways to register a
 server:
 
-1. **The anymcp server jar** (recommended), from
+1. **The vecta server jar** (recommended), from
    [plugins/universal](plugins/universal). One jar for vanilla, Paper/Spigot,
    Fabric/Quilt, Forge (1.7.10+) and NeoForge, on Java 8 and newer.
 
    ```
-   java -jar anymcp.jar paper.jar nogui               # wrapper mode
-   java -javaagent:anymcp.jar -jar server.jar nogui   # agent mode (or in user_jvm_args.txt for run.sh)
+   java -jar vecta.jar paper.jar nogui               # wrapper mode
+   java -javaagent:vecta.jar -jar server.jar nogui   # agent mode (or in user_jvm_args.txt for run.sh)
    ```
 
-   - **Configuration:** `anymcp.properties` (created on first start) or `ANYMCP_*`
+   - **Configuration:** `vecta.properties` (created on first start) or `VECTA_*`
      environment variables.
    - **Detection:** it pings the local server and reads the mods, plugins and
      network channels that actually loaded, by reflection on each platform. It
@@ -248,7 +248,7 @@ server:
    - **Commands** (`commands=true`): `/hub`, `/server <id>` and `/global <message>`
      (operators only), handled at the network layer with no plugin. `/hub` and
      `/server` transfer 1.20.5+ players via a cookie and reconnect older ones;
-     `/global` broadcasts across every anymcp server. Needs Minecraft 1.12+.
+     `/global` broadcasts across every vecta server. Needs Minecraft 1.12+.
    - **Guard** (`guard=true`): the jar takes the public port and only forwards
      connections carrying the gateway's signed PROXY header
      ([docs/guard-protocol.md](docs/guard-protocol.md)). Players who try the
@@ -257,7 +257,7 @@ server:
 2. **The sidecar agent** next to any server:
 
    ```
-   anymcp agent -config agent.json
+   vecta agent -config agent.json
    ```
 
    - **Config:** see [examples/agent.json](examples/agent.json).
@@ -306,13 +306,13 @@ The gateway is the only public entry point:
   persisted; agents and plugins re-register within one heartbeat.
 
 **Metrics** (`GET /metrics`, Prometheus text format):
-- `anymcp_connections_total{intent}`: status, login, transfer
-- `anymcp_connections_rejected_total{reason}`: rate, concurrency, lobby-full
-- `anymcp_routes_total{via,server}`: cookie, subdomain, pending, sticky, only-candidate
-- `anymcp_lobby_outcomes_total{outcome}`: transfer, limbo
-- `anymcp_backend_dial_failures_total{server}`
-- `anymcp_transfer_tickets_total{mode}`
-- `anymcp_lobby_sessions_active`, `anymcp_servers_registered`, `anymcp_servers_online`
+- `vecta_connections_total{intent}`: status, login, transfer
+- `vecta_connections_rejected_total{reason}`: rate, concurrency, lobby-full
+- `vecta_routes_total{via,server}`: cookie, subdomain, pending, sticky, only-candidate
+- `vecta_lobby_outcomes_total{outcome}`: transfer, limbo
+- `vecta_backend_dial_failures_total{server}`
+- `vecta_transfer_tickets_total{mode}`
+- `vecta_lobby_sessions_active`, `vecta_servers_registered`, `vecta_servers_online`
 
 **Fuzzing:** every network parser has a Go fuzz target, and CI runs each briefly
 on every push. Covered:
@@ -360,7 +360,7 @@ on every push. Covered:
 
 ```
 go test ./...
-go build -o bin/anymcp ./cmd/anymcp
+go build -o bin/vecta ./cmd/vecta
 ```
 
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)):
@@ -374,7 +374,7 @@ CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)):
 - **Image:** the multi-arch Docker image (amd64, arm64) is built on every push.
   `v*` tags publish it to `ghcr.io/<owner>/<repo>` as `<version>` and `latest`.
 - **Nightly and on demand:** the full e2e run, on a self-hosted runner labeled
-  `anymcp-e2e` that can reach the Docker host.
+  `vecta-e2e` that can reach the Docker host.
 
 Regenerate the limbo tables and the jar's `packets.json` after a minecraft-data
 update with `python tools/limbogen/gen.py [cache-dir]`.
@@ -395,7 +395,7 @@ E2E_HOST=root@docker-host GW_HOST=docker-host bash test/e2e/run.sh
 
 [test/e2e/run.sh](test/e2e/run.sh) does the following:
 1. Runs the unit tests and builds the gateway.
-2. Builds the anymcp server jar on the Docker host and runs its self-test, then
+2. Builds the vecta server jar on the Docker host and runs its self-test, then
    deploys the stack (restarting the jar-loaded servers if the jar changed).
 3. Waits for all servers, and tunes the Paper servers
    ([tune-paper.sh](test/e2e/tune-paper.sh), idempotent).
@@ -450,7 +450,7 @@ covers:
 [HeadlessMC](https://github.com/headlesshq/headlessmc) in
 [test/e2e/hmc](test/e2e/hmc).
 `bash test/e2e/hmc/scenarios.sh [parallelism] [name-regex]`, run on the Docker
-host, launches them into the `anymcp-test_default` network. It checks that:
+host, launches them into the `vecta-test_default` network. It checks that:
 - real vanilla 1.8.9, 1.12.2, 1.20.1 and 1.20.4 clients reach the limbo menu;
 - direct joins by single match and by subdomain work;
 - real modded clients join their pack through the gateway, confirmed in the

@@ -15,12 +15,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"anymcp/internal/guard"
-	"anymcp/internal/match"
-	"anymcp/internal/metrics"
-	"anymcp/internal/proto"
-	"anymcp/internal/registry"
-	"anymcp/internal/store"
+	"vecta/internal/guard"
+	"vecta/internal/match"
+	"vecta/internal/metrics"
+	"vecta/internal/proto"
+	"vecta/internal/registry"
+	"vecta/internal/store"
 )
 
 type Config struct {
@@ -122,14 +122,14 @@ func New(cfg Config, reg *registry.Registry, log *slog.Logger) *Router {
 	}
 	if m := cfg.Metrics; m != nil {
 		r.m = routerMetrics{
-			connections:  m.Counter("anymcp_connections_total", "Player connections by handshake intent", "intent"),
-			rejected:     m.Counter("anymcp_connections_rejected_total", "Connections refused by limits", "reason"),
-			routes:       m.Counter("anymcp_routes_total", "Players piped to a backend", "via", "server"),
-			lobby:        m.Counter("anymcp_lobby_outcomes_total", "How lobby sessions ended", "outcome"),
-			dialFailures: m.Counter("anymcp_backend_dial_failures_total", "Failed backend dials", "server"),
-			tickets:      m.Counter("anymcp_transfer_tickets_total", "Transfer tickets issued via the owner API", "mode"),
+			connections:  m.Counter("vecta_connections_total", "Player connections by handshake intent", "intent"),
+			rejected:     m.Counter("vecta_connections_rejected_total", "Connections refused by limits", "reason"),
+			routes:       m.Counter("vecta_routes_total", "Players piped to a backend", "via", "server"),
+			lobby:        m.Counter("vecta_lobby_outcomes_total", "How lobby sessions ended", "outcome"),
+			dialFailures: m.Counter("vecta_backend_dial_failures_total", "Failed backend dials", "server"),
+			tickets:      m.Counter("vecta_transfer_tickets_total", "Transfer tickets issued via the owner API", "mode"),
 		}
-		m.GaugeFunc("anymcp_lobby_sessions_active", "Players currently in the lobby or limbo",
+		m.GaugeFunc("vecta_lobby_sessions_active", "Players currently in the lobby or limbo",
 			func() float64 { return float64(r.lobbyActive.Load()) })
 	}
 	return r
@@ -347,14 +347,14 @@ func (r *Router) statusDoc(protocol int32, clientIP string) map[string]any {
 	sum := r.summary(protocol)
 	motd := r.cfg.MOTD
 	if motd == "" {
-		motd = "anymcp gateway"
+		motd = "vecta gateway"
 	}
 	second := proto.C(fmt.Sprintf("%d servers online, %d for %s", len(sum.samples), sum.compatible, proto.VersionName(protocol)), "gray")
 	if line, ok := r.personalLine(clientIP); ok {
 		second = line
 	}
 	return map[string]any{
-		"version":     map[string]any{"name": "anymcp", "protocol": protocol},
+		"version":     map[string]any{"name": "vecta", "protocol": protocol},
 		"players":     map[string]any{"online": sum.players, "max": sum.maxPlayers, "sample": sum.samples},
 		"description": proto.Join(proto.C(motd+"\n", "gold"), second),
 	}

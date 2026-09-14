@@ -8,7 +8,7 @@ const { execFileSync } = require('child_process')
 
 const GW_HOST = process.env.GW_HOST || '10.10.25.155'
 const GW_PORT = Number(process.env.GW_PORT || 35565)
-const PROJECT = process.env.PROJECT || 'anymcp-test'
+const PROJECT = process.env.PROJECT || 'vecta-test'
 const DOCKER = process.env.DOCKER || 'docker'
 const container = (svc) => `${PROJECT}-${svc}-1`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -49,7 +49,7 @@ async function main () {
     const c = conn('paper-via.play.test', '1.21.4', 'CmdA')
     await onSpawn(c)
     let cookie = false; let xfer = null
-    c.on('store_cookie', (p) => { if (p.key === 'anymcp:route') cookie = true })
+    c.on('store_cookie', (p) => { if (p.key === 'vecta:route') cookie = true })
     c.on('transfer', (p) => { xfer = p })
     await sleep(1600); sendCommand(c, '1.21.4', 'server paper-via')
     await sleep(2000); c.end()

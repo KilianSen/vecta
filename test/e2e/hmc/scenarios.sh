@@ -4,10 +4,10 @@
 # version reaches the menu; choosing is covered by clients.cjs.
 #   bash scenarios.sh [parallelism] [name-filter-regex]
 set -u
-P=${PROJECT:-anymcp-test}
+P=${PROJECT:-vecta-test}
 PAR=${1:-3}
 FILTER=${2:-.}
-OUT=/tmp/anymcp-hmc
+OUT=/tmp/vecta-hmc
 mkdir -p "$OUT"
 
 # name version host expectation(extended regex, no spaces) timeout mods mode env
@@ -40,8 +40,8 @@ launch() { # name ver host timeout mods user log env
     IFS=',' read -ra kv <<< "$8"
     for e in "${kv[@]}"; do envs+=(-e "$e"); done
   fi
-  docker run --rm --name "$P-hmc-$1" --label anymcp-test=true --network "${P}_default" \
-    -e MODS="$mods" "${envs[@]}" -v anymcp-test-hmc-cache:/cache anymcp-test/hmc:2.10.0 \
+  docker run --rm --name "$P-hmc-$1" --label vecta-test=true --network "${P}_default" \
+    -e MODS="$mods" "${envs[@]}" -v vecta-test-hmc-cache:/cache vecta-test/hmc:2.10.0 \
     "$2" "$6" "$3" 25565 "$4" >"$7" 2>&1
 }
 

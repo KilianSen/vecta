@@ -13,7 +13,7 @@ const { execSync, execFileSync } = require('child_process')
 const GW_HOST = process.env.GW_HOST || '10.10.25.155'
 const GW_PORT = Number(process.env.GW_PORT || 35565)
 const API = process.env.API || `http://${GW_HOST}:38080`
-const PROJECT = process.env.PROJECT || 'anymcp-test'
+const PROJECT = process.env.PROJECT || 'vecta-test'
 const DOCKER = process.env.DOCKER || 'docker'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -79,7 +79,7 @@ function connectOnce (o) {
     client.on('store_cookie', (p) => { o.cookies[p.key] = p.value })
     client.on('transfer', (p) => finish({ outcome: 'transfer', transfer: { host: p.host, port: p.port } }))
     client.on('show_dialog', (p) => {
-      res.dialogIds = [...new Set(JSON.stringify(p).match(/anymcp:join\/[a-z0-9-]+/g) || [])]
+      res.dialogIds = [...new Set(JSON.stringify(p).match(/vecta:join\/[a-z0-9-]+/g) || [])]
       const choice = o.chooseDialog?.(res.dialogIds)
       if (choice) client.write('custom_click_action', { id: choice, nbt: undefined })
     })
@@ -317,7 +317,7 @@ async function main () {
       `exec 3<>/dev/tcp/127.0.0.1/25565; printf '\\x0f\\x00\\x2f\\x09localhost\\x63\\xdd\\x${state}${extra}' >&3; ` +
       'timeout 3 cat <&3 | tr -d "\\000" | head -c 2000; true'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
     const status = raw('01', '\\x01\\x00')
-    expect(/anymcp guard/.test(status) && /play\.test/.test(status), `direct status: ${JSON.stringify(status)}`)
+    expect(/vecta guard/.test(status) && /play\.test/.test(status), `direct status: ${JSON.stringify(status)}`)
     const login = raw('02', '')
     expect(/Join this server through play\.test/.test(login), `direct login: ${JSON.stringify(login)}`)
     const log = docker(`logs --since 30m ${container('mc-paper-legacy')} 2>&1`)
@@ -326,8 +326,8 @@ async function main () {
   })
 
   await scenario('S2 1.21.11 vanilla: ambiguous -> dialog -> pick paper-a -> transfer -> cookie -> spawn', async () => {
-    const r = await join({ version: '1.21.11', username: 'dialog774', brand: 'vanilla', chooseDialog: (ids) => ids.includes('anymcp:join/paper-a') && 'anymcp:join/paper-a' })
-    expect(JSON.stringify(r.hops[0].dialogIds.sort()) === JSON.stringify(['anymcp:join/paper-a', 'anymcp:join/paper-via']), `dialog ids ${r.hops[0].dialogIds}`)
+    const r = await join({ version: '1.21.11', username: 'dialog774', brand: 'vanilla', chooseDialog: (ids) => ids.includes('vecta:join/paper-a') && 'vecta:join/paper-a' })
+    expect(JSON.stringify(r.hops[0].dialogIds.sort()) === JSON.stringify(['vecta:join/paper-a', 'vecta:join/paper-via']), `dialog ids ${r.hops[0].dialogIds}`)
     expect(r.hops[1]?.cookieRequested, 'no cookie request after transfer')
     expect(r.final.outcome === 'spawned', `hops ${describe(r)} ${r.final.reason}`)
     expect(await backendSaw('mc-paper-a', 'dialog774'), 'paper-a did not see player')
@@ -417,7 +417,7 @@ async function main () {
       /paper-plugin/.test(gatewayLog()), 180000)
     const user = 'plugsrv769'
     const r = await inGameCommand({ version: '1.21.4', username: user, host: 'paper-plugin.play.test', command: 'server paper-via' })
-    expect(r.spawned && r.outcome === 'transfer' && r.cookies['anymcp:route'], `on hidden server: ${r.outcome} ${r.reason} ${r.chat.slice(0, 200)}`)
+    expect(r.spawned && r.outcome === 'transfer' && r.cookies['vecta:route'], `on hidden server: ${r.outcome} ${r.reason} ${r.chat.slice(0, 200)}`)
     const hops = await followTransfers({ version: '1.21.4', username: user }, r.cookies, r.transfer)
     const last = hops[hops.length - 1]
     expect(hops[0].cookieRequested && last.outcome === 'spawned' && await backendSaw('mc-paper-via', user), `hops ${hops.map((h) => h.outcome)} ${last.reason}`)
@@ -436,7 +436,7 @@ async function main () {
   await scenario('P3 jar /hub (1.21.4) -> lobby cookie -> lobby -> spawn on paper-via', async () => {
     const user = 'plughub769'
     const r = await inGameCommand({ version: '1.21.4', username: user, host: 'paper-plugin.play.test', command: 'hub' })
-    expect(r.spawned && r.outcome === 'transfer' && r.cookies['anymcp:route'], `on hidden server: ${r.outcome} ${r.reason} ${r.chat.slice(0, 200)}`)
+    expect(r.spawned && r.outcome === 'transfer' && r.cookies['vecta:route'], `on hidden server: ${r.outcome} ${r.reason} ${r.chat.slice(0, 200)}`)
     const hops = await followTransfers({ version: '1.21.4', username: user }, r.cookies, r.transfer)
     const last = hops[hops.length - 1]
     const log = gatewayLog()
@@ -453,7 +453,7 @@ async function main () {
   })
 
   await scenario('S11 forged route cookie is rejected', async () => {
-    const r = await connectOnce({ version: '1.21.4', username: 'forger', intent: 3, cookies: { 'anymcp:route': Buffer.from('v1|fabric-pack|forger|9999999999|AAAA') } })
+    const r = await connectOnce({ version: '1.21.4', username: 'forger', intent: 3, cookies: { 'vecta:route': Buffer.from('v1|fabric-pack|forger|9999999999|AAAA') } })
     expect(r.cookieRequested, 'no cookie request')
     await sleep(2000)
     expect(!backendSawNow('mc-fabric', 'forger'), 'forged cookie reached fabric-pack')

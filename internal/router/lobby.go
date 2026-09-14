@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"anymcp/internal/limbo"
-	"anymcp/internal/match"
-	"anymcp/internal/proto"
-	"anymcp/internal/registry"
+	"vecta/internal/limbo"
+	"vecta/internal/match"
+	"vecta/internal/proto"
+	"vecta/internal/registry"
 )
 
 // lobby learns more about the client, then routes it (transfer on 1.20.5+,
@@ -217,7 +217,7 @@ func (r *Router) lobbyConfig(s *session, client match.Client) {
 	// clients ignore the unknown channel.
 	s.send(
 		proto.NewPacket(proto.CfgPluginMessageOutID).String("neoforge:register").VarInt(0).Frame(),
-		proto.NewPacket(proto.CfgPluginMessageOutID).String("minecraft:brand").String("anymcp").Frame(),
+		proto.NewPacket(proto.CfgPluginMessageOutID).String("minecraft:brand").String("vecta").Frame(),
 	)
 
 	probe := probeClient(frames, r.cfg.ProbeWindow)
@@ -424,8 +424,8 @@ func brandLoader(brand string) string {
 }
 
 const (
-	actionJoinPrefix = "anymcp:join/"
-	actionLeave      = "anymcp:leave"
+	actionJoinPrefix = "vecta:join/"
+	actionLeave      = "vecta:leave"
 	maxDialogServers = 30
 )
 

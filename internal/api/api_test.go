@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"anymcp/internal/metrics"
-	"anymcp/internal/netguard"
-	"anymcp/internal/registry"
-	"anymcp/internal/router"
+	"vecta/internal/metrics"
+	"vecta/internal/netguard"
+	"vecta/internal/registry"
+	"vecta/internal/router"
 )
 
 type fakeIssuer struct {
@@ -38,9 +38,9 @@ func setup(t *testing.T) (*httptest.Server, *registry.Registry, *fakeIssuer, *me
 		t.Fatal(err)
 	}
 	lan := netip.MustParsePrefix("192.168.0.0/16")
-	issuer := &fakeIssuer{got: router.Ticket{Mode: "transfer", Host: "play.test", Port: 25565, CookieKey: "anymcp:route", Cookie: "Y29va2ll"}}
+	issuer := &fakeIssuer{got: router.Ticket{Mode: "transfer", Host: "play.test", Port: 25565, CookieKey: "vecta:route", Cookie: "Y29va2ll"}}
 	m := metrics.New()
-	m.Counter("anymcp_test_total", "test").Inc()
+	m.Counter("vecta_test_total", "test").Inc()
 	srv := httptest.NewServer(New(Options{
 		Registry: reg,
 		Owners: map[string]Owner{
@@ -119,7 +119,7 @@ func TestTransferTicket(t *testing.T) {
 		t.Fatalf("success: %d %s", code, body)
 	}
 	var tk router.Ticket
-	if err := json.Unmarshal([]byte(body), &tk); err != nil || tk.Mode != "transfer" || tk.CookieKey != "anymcp:route" {
+	if err := json.Unmarshal([]byte(body), &tk); err != nil || tk.Mode != "transfer" || tk.CookieKey != "vecta:route" {
 		t.Fatalf("ticket %s (%v)", body, err)
 	}
 	if issuer.req[0] != "Steve" || issuer.req[1] != int32(767) || issuer.req[2] != "survival" {
@@ -153,7 +153,7 @@ func TestMetricsToken(t *testing.T) {
 		t.Fatalf("metrics without token: %d", code)
 	}
 	code, body := do(t, "GET", srv.URL+"/metrics", "scrape", "")
-	if code != http.StatusOK || !strings.Contains(body, "anymcp_test_total 1") {
+	if code != http.StatusOK || !strings.Contains(body, "vecta_test_total 1") {
 		t.Fatalf("metrics: %d %s", code, body)
 	}
 }

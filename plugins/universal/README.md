@@ -1,28 +1,28 @@
-# anymcp server jar
+# VectaMine — server jar
 
 One jar for any Java Minecraft server (vanilla, Paper/Spigot, Fabric/Quilt,
-Forge, NeoForge; Java 8 and newer). It registers the server at an anymcp
+Forge, NeoForge; Java 8 and newer). It registers the server at an vecta
 gateway and can guard it so players can only join through the gateway. No
 dependencies and nothing compiled against a platform, so the same jar works
 across loaders and versions.
 
 ## Install
 
-Put `anymcp.jar` in the server directory and pick one way to start it:
+Put `vecta.jar` in the server directory and pick one way to start it:
 
 | Mode | Start command | Use when |
 |---|---|---|
-| Wrapper | `java -jar anymcp.jar [server.jar] [server args]` | The server starts from a single jar (vanilla, Paper, Fabric launcher, Forge ≤1.16, Forge/NeoForge server shims). Without `server.jar`, the jar is detected (or set `serverJar`). |
-| Java agent | `java -javaagent:anymcp.jar -jar server.jar` | The server starts from a script, e.g. Forge/NeoForge `run.sh`: add `-javaagent:anymcp.jar` to `user_jvm_args.txt`. |
+| Wrapper | `java -jar vecta.jar [server.jar] [server args]` | The server starts from a single jar (vanilla, Paper, Fabric launcher, Forge ≤1.16, Forge/NeoForge server shims). Without `server.jar`, the jar is detected (or set `serverJar`). |
+| Java agent | `java -javaagent:vecta.jar -jar server.jar` | The server starts from a script, e.g. Forge/NeoForge `run.sh`: add `-javaagent:vecta.jar` to `user_jvm_args.txt`. |
 
-On the first start it creates `anymcp.properties`. Fill in `gateway`, `token`,
+On the first start it creates `vecta.properties`. Fill in `gateway`, `token`,
 `serverId` and `address`, then restart. Every key can also come from an
-environment variable (`ANYMCP_TOKEN`, `ANYMCP_SERVER_ID`, …), a system
-property (`-Danymcp.token=…`) or agent arguments
-(`-javaagent:anymcp.jar=serverId=pack;guard=true`, or `=path/to/anymcp.properties`).
+environment variable (`VECTA_TOKEN`, `VECTA_SERVER_ID`, …), a system
+property (`-Dvecta.token=…`) or agent arguments
+(`-javaagent:vecta.jar=serverId=pack;guard=true`, or `=path/to/vecta.properties`).
 
-With `itzg/minecraft-server`, set `JVM_OPTS=-javaagent:/path/anymcp.jar` and
-the `ANYMCP_*` variables.
+With `itzg/minecraft-server`, set `JVM_OPTS=-javaagent:/path/vecta.jar` and
+the `VECTA_*` variables.
 
 ## What it reports
 
@@ -71,7 +71,7 @@ layer — no plugin, and the same code on every loader from 1.7.10 up:
 |---|---|---|
 | `/hub`, `/lobby` | anyone | Moves the player to the gateway's lobby. |
 | `/server <id>` | anyone | Moves the player to another registered server. |
-| `/global <message>` | operators (`ops.json`) | Broadcast to every player on every anymcp server. |
+| `/global <message>` | operators (`ops.json`) | Broadcast to every player on every vecta server. |
 
 `/hub` and `/server` use a transfer ticket: 1.20.5+ clients move without
 reconnecting (Store Cookie + Transfer), older clients get a "reconnect to …"
@@ -95,7 +95,7 @@ disconnect message, and direct status pings show `guardJoinHint`.
 
 1. In `server.properties`, move the server: `server-port=25566`,
    `server-ip=127.0.0.1`.
-2. In `anymcp.properties`: `guard=true`, `guardListen=0.0.0.0:25565`,
+2. In `vecta.properties`: `guard=true`, `guardListen=0.0.0.0:25565`,
    `guardJoinHint=play.example.com`, and `address` = the guard's address as the
    gateway sees it.
 3. The registration then carries `"guard": true`, and the gateway signs every
@@ -135,5 +135,5 @@ sh build.sh
 ```
 
 Needs a JDK 11+ (compiles to Java 8 bytecode), or Docker. It writes
-`build/anymcp.jar` and runs the self-test, which includes the guard test vector
+`build/vecta.jar` and runs the self-test, which includes the guard test vector
 shared with the Go gateway.

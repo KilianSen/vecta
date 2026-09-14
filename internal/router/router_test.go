@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"anymcp/internal/proto"
-	"anymcp/internal/registry"
+	"vecta/internal/proto"
+	"vecta/internal/registry"
 )
 
 // backend is a fake Minecraft server that records the first two frames of
@@ -364,12 +364,12 @@ func TestDialogSelection(t *testing.T) {
 		proto.NewPacket(proto.CfgPluginMessageInID).String("minecraft:brand").String("vanilla").Frame(),
 	)
 	dialog := c.expect(proto.CfgShowDialogID).Remaining()
-	for _, want := range []string{"minecraft:multi_action", "anymcp:join/alpha", "anymcp:join/beta"} {
+	for _, want := range []string{"minecraft:multi_action", "vecta:join/alpha", "vecta:join/beta"} {
 		if !bytes.Contains(dialog, []byte(want)) {
 			t.Fatalf("dialog missing %q", want)
 		}
 	}
-	c.send(proto.NewPacket(proto.CfgCustomClickActionID).String("anymcp:join/beta").Bool(false).Frame())
+	c.send(proto.NewPacket(proto.CfgCustomClickActionID).String("vecta:join/beta").Bool(false).Frame())
 	c.expect(proto.CfgStoreCookieID)
 	c.expect(proto.CfgTransferID)
 }

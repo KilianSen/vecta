@@ -1,9 +1,9 @@
 # Example backend: a Fabric server that registers itself with the gateway
-# through the anymcp server jar (plugins/universal) in Java agent mode, with
+# through the vecta server jar (plugins/universal) in Java agent mode, with
 # the guard on so only the gateway can connect. Run it on any host the gateway
-# can reach. Put anymcp.jar next to this file.
+# can reach. Put vecta.jar next to this file.
 #
-#   export ANYMCP_TOKEN=... ANYMCP_ADDRESS=10.0.0.31:25565
+#   export VECTA_TOKEN=... VECTA_ADDRESS=10.0.0.31:25565
 #   docker compose -f compose.server-example.yaml up -d
 name: survival
 
@@ -20,20 +20,20 @@ services:
       MEMORY: 2G
       # The guard takes the public port; the server moves to 25566.
       SERVER_PORT: "25566"
-      JVM_OPTS: -javaagent:/anymcp/anymcp.jar
-      ANYMCP_GATEWAY: ${ANYMCP_GATEWAY:-https://mc-api.example.com}
-      ANYMCP_TOKEN: ${ANYMCP_TOKEN:?set ANYMCP_TOKEN to your owner token}
-      ANYMCP_SERVER_ID: ${ANYMCP_SERVER_ID:-survival}
-      ANYMCP_NAME: ${ANYMCP_NAME:-Survival}
-      ANYMCP_ADDRESS: ${ANYMCP_ADDRESS:?set ANYMCP_ADDRESS to host:port the gateway dials}
-      ANYMCP_GUARD: "true"
-      ANYMCP_GUARD_LISTEN: 0.0.0.0:25565
-      ANYMCP_GUARD_JOIN_HINT: ${ANYMCP_JOIN_HINT:-play.example.com}
+      JVM_OPTS: -javaagent:/vecta/vecta.jar
+      VECTA_GATEWAY: ${VECTA_GATEWAY:-https://mc-api.example.com}
+      VECTA_TOKEN: ${VECTA_TOKEN:?set VECTA_TOKEN to your owner token}
+      VECTA_SERVER_ID: ${VECTA_SERVER_ID:-survival}
+      VECTA_NAME: ${VECTA_NAME:-Survival}
+      VECTA_ADDRESS: ${VECTA_ADDRESS:?set VECTA_ADDRESS to host:port the gateway dials}
+      VECTA_GUARD: "true"
+      VECTA_GUARD_LISTEN: 0.0.0.0:25565
+      VECTA_GUARD_JOIN_HINT: ${VECTA_JOIN_HINT:-play.example.com}
     ports:
       - "25565:25565"   # only the guard is published
     volumes:
       - minecraft-data:/data
-      - ./anymcp.jar:/anymcp/anymcp.jar:ro
+      - ./vecta.jar:/vecta/vecta.jar:ro
 
 volumes:
   minecraft-data:

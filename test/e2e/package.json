@@ -1,7 +1,7 @@
 {
-  "name": "anymcp-e2e",
+  "name": "vecta-e2e",
   "private": true,
-  "description": "End-to-end protocol-bot suite for the anymcp gateway",
+  "description": "End-to-end protocol-bot suite for the vecta gateway",
   "scripts": {
     "bots": "node clients.cjs"
   },

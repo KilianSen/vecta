@@ -13,7 +13,7 @@
   "forgeModQuery": false,
   "motd": "Example network - join to pick a server",
 
-  "dataFile": "/var/lib/anymcp/state.json",
+  "dataFile": "/var/lib/vecta/state.json",
   "stickyTTL": "720h",
   "personalizedMotd": true,
   "rateLimit": {

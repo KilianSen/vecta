@@ -12,7 +12,7 @@ set -euo pipefail
 
 E2E_HOST=${E2E_HOST:-root@10.10.25.155}
 export GW_HOST=${GW_HOST:-10.10.25.155}
-REMOTE=${REMOTE:-/root/anymcp-test}
+REMOTE=${REMOTE:-/root/vecta-test}
 EXPECT_SERVERS=${EXPECT_SERVERS:-7}
 SKIP_HMC=${SKIP_HMC:-}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -25,22 +25,22 @@ step() { printf '\n== %s\n' "$*"; }
 
 step "build and unit tests"
 (cd "$ROOT" && go vet ./... && go test ./... >"$RESULTS/unit.log" 2>&1) || { cat "$RESULTS/unit.log"; exit 1; }
-(cd "$ROOT" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$E2E/anymcp" ./cmd/anymcp)
+(cd "$ROOT" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$E2E/vecta" ./cmd/vecta)
 
-step "anymcp server jar"
-$SSH "rm -rf /root/anymcp-build/universal && mkdir -p /root/anymcp-build/universal $REMOTE/anymcp-jar"
+step "vecta server jar"
+$SSH "rm -rf /root/vecta-build/universal && mkdir -p /root/vecta-build/universal $REMOTE/vecta-jar"
 tar -C "$ROOT/plugins/universal" --exclude=build -cf - . |
-  $SSH "tar --no-same-owner -C /root/anymcp-build/universal -xf -"
-$SSH "sh /root/anymcp-build/universal/build.sh >/root/anymcp-build/universal.log 2>&1 || { cat /root/anymcp-build/universal.log; exit 1; }; tail -n 2 /root/anymcp-build/universal.log"
+  $SSH "tar --no-same-owner -C /root/vecta-build/universal -xf -"
+$SSH "sh /root/vecta-build/universal/build.sh >/root/vecta-build/universal.log 2>&1 || { cat /root/vecta-build/universal.log; exit 1; }; tail -n 2 /root/vecta-build/universal.log"
 # Running servers keep the old jar loaded; restart them after compose up if it changed.
-JAR_CHANGED=$($SSH "cmp -s /root/anymcp-build/universal/build/anymcp.jar $REMOTE/anymcp-jar/anymcp.jar || echo yes")
-$SSH "cp /root/anymcp-build/universal/build/anymcp.jar $REMOTE/anymcp-jar/anymcp.jar"
+JAR_CHANGED=$($SSH "cmp -s /root/vecta-build/universal/build/vecta.jar $REMOTE/vecta-jar/vecta.jar || echo yes")
+$SSH "cp /root/vecta-build/universal/build/vecta.jar $REMOTE/vecta-jar/vecta.jar"
 
 step "deploy to $E2E_HOST:$REMOTE"
 $SSH "mkdir -p $REMOTE/hmc"
-scp -q "$E2E"/{Dockerfile,compose.yaml,gateway.json,tune-paper.sh,anymcp} "$E2E_HOST:$REMOTE/"
+scp -q "$E2E"/{Dockerfile,compose.yaml,gateway.json,tune-paper.sh,vecta} "$E2E_HOST:$REMOTE/"
 scp -q "$E2E"/hmc/{Dockerfile,hmc-run.sh,scenarios.sh} "$E2E_HOST:$REMOTE/hmc/"
-$SSH "cd $REMOTE && sed -i 's/\r\$//' tune-paper.sh hmc/*.sh && docker build -q -t anymcp-test/hmc:2.10.0 hmc >/dev/null && docker compose up -d --build --remove-orphans 2>&1 | tail -n 3"
+$SSH "cd $REMOTE && sed -i 's/\r\$//' tune-paper.sh hmc/*.sh && docker build -q -t vecta-test/hmc:2.10.0 hmc >/dev/null && docker compose up -d --build --remove-orphans 2>&1 | tail -n 3"
 if [ -n "$JAR_CHANGED" ]; then
   echo "server jar changed; restarting the servers that load it"
   $SSH "cd $REMOTE && docker compose restart mc-paper-legacy mc-paper-via mc-fabric mc-neoforge mc-forge 2>&1 | tail -n 1"
@@ -81,7 +81,7 @@ fi
 
 step "metrics snapshot"
 curl -s -H "Authorization: Bearer ${METRICS_TOKEN:-e2e-metrics}" "http://$GW_HOST:38080/metrics" >"$RESULTS/metrics.txt"
-grep -E '^anymcp_(routes|lobby_outcomes|connections)_total' "$RESULTS/metrics.txt" | head -20
+grep -E '^vecta_(routes|lobby_outcomes|connections)_total' "$RESULTS/metrics.txt" | head -20
 set -e
 
 step "summary"

@@ -7,8 +7,8 @@ import (
 	"net"
 	"time"
 
-	"anymcp/internal/guard"
-	"anymcp/internal/proto"
+	"vecta/internal/guard"
+	"vecta/internal/proto"
 )
 
 // pingProtocol is sent in health pings. -1 makes version-translating plugins

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"anymcp/internal/proto"
+	"vecta/internal/proto"
 )
 
 // TestAllVersions runs every supported protocol through login, the optional

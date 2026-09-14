@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"anymcp/internal/metrics"
-	"anymcp/internal/netguard"
-	"anymcp/internal/registry"
-	"anymcp/internal/router"
+	"vecta/internal/metrics"
+	"vecta/internal/netguard"
+	"vecta/internal/registry"
+	"vecta/internal/router"
 )
 
 // Owner is an API client allowed to register servers.
@@ -326,7 +326,7 @@ func (a *api) metrics(w http.ResponseWriter, r *http.Request) {
 
 var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>anymcp servers</title>
+<title>vecta servers</title>
 <style>
 body{font:15px system-ui,sans-serif;margin:0;padding:24px 16px;background:#111418;color:#e6e6e6}
 main{max-width:860px;margin:auto}h1{font-size:22px}code{background:#232830;padding:2px 6px;border-radius:4px}

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"anymcp/internal/proto"
+	"vecta/internal/proto"
 )
 
 // Server describes one backend. The first block is owner-declared metadata,

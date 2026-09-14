@@ -33,7 +33,7 @@ jobs:
           git diff --exit-code internal/limbo plugins/universal/src/main/resources/packets.json
 
   jar:
-    # The anymcp server jar: Java 8 bytecode, self-test, uploaded as an artifact.
+    # The vecta server jar: Java 8 bytecode, self-test, uploaded as an artifact.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,15 +46,15 @@ jobs:
           VERSION: ${{ github.ref_name }}
       - uses: actions/upload-artifact@v4
         with:
-          name: anymcp-jar
-          path: plugins/universal/build/anymcp.jar
+          name: vecta-jar
+          path: plugins/universal/build/vecta.jar
 
   e2e:
-    # Needs a self-hosted runner labeled anymcp-e2e with ssh access to the
+    # Needs a self-hosted runner labeled vecta-e2e with ssh access to the
     # Docker host and a docker context pointing at it (see test/e2e/run.sh).
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: unit
-    runs-on: [self-hosted, anymcp-e2e]
+    runs-on: [self-hosted, vecta-e2e]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4

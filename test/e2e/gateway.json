@@ -10,9 +10,9 @@
   "probeWindow": "1500ms",
   "pendingTTL": "10m",
   "stickyTTL": "-1s",
-  "dataFile": "/tmp/anymcp-state.json",
+  "dataFile": "/tmp/vecta-state.json",
   "metricsToken": "e2e-metrics",
-  "motd": "anymcp e2e",
+  "motd": "vecta e2e",
   "owners": {
     "owner-b": "tok-b",
     "owner-d": "tok-d",

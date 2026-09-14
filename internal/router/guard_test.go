@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"anymcp/internal/guard"
-	"anymcp/internal/proto"
-	"anymcp/internal/registry"
+	"vecta/internal/guard"
+	"vecta/internal/proto"
+	"vecta/internal/registry"
 )
 
 // startGuardedBackend accepts only connections with a valid signed header

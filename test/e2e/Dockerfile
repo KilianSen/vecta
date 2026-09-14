@@ -1,5 +1,5 @@
 FROM alpine:3.20
-COPY anymcp /usr/local/bin/anymcp
-RUN chmod 0755 /usr/local/bin/anymcp
-COPY gateway.json /etc/anymcp/
-ENTRYPOINT ["anymcp"]
+COPY vecta /usr/local/bin/vecta
+RUN chmod 0755 /usr/local/bin/vecta
+COPY gateway.json /etc/vecta/
+ENTRYPOINT ["vecta"]

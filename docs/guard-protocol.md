@@ -1,7 +1,7 @@
 # Guard protocol (v1)
 
 A guarded backend accepts only connections that come from the gateway. The
-anymcp server jar implements the backend side: it listens on the public port
+vecta server jar implements the backend side: it listens on the public port
 and forwards verified connections to the real server on localhost. Players who
 try the backend address directly are refused.
 
@@ -11,7 +11,7 @@ guard is on), or on a static server with `"guard": true, "guardSecret": "..."`.
 ## Key
 
 ```
-key = SHA-256("anymcp-guard-key-v1:" + secret)
+key = SHA-256("vecta-guard-key-v1:" + secret)
 ```
 
 `secret` is the owner token for registered servers, or `guardSecret` for
@@ -42,7 +42,7 @@ After the address block comes one TLV of type `0xE0` with a 53-byte value:
 | 21 | 32 | HMAC-SHA256 |
 
 ```
-mac = HMAC-SHA256(key, "anymcp-guard-v1" || verCmd || family || addressBlock
+mac = HMAC-SHA256(key, "vecta-guard-v1" || verCmd || family || addressBlock
                        || version || timestamp || nonce)
 ```
 

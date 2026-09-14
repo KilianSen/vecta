@@ -3,7 +3,7 @@ package match
 import (
 	"testing"
 
-	"anymcp/internal/registry"
+	"vecta/internal/registry"
 )
 
 func servers() []registry.Server {

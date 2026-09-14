@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"anymcp/internal/proto"
+	"vecta/internal/proto"
 )
 
 //go:embed data/*.nbt.gz
@@ -163,7 +163,7 @@ func (s *session) login(frames <-chan []byte) error {
 		// takes the vanilla path and disconnects if it has required channels.
 		// Other clients ignore the unknown channel.
 		proto.NewPacket(s.ids.CfgPluginMessage).String("neoforge:register").VarInt(0).VarInt(0).Frame(),
-		proto.NewPacket(s.ids.CfgPluginMessage).String("minecraft:brand").String("anymcp").Frame(),
+		proto.NewPacket(s.ids.CfgPluginMessage).String("minecraft:brand").String("vecta").Frame(),
 		proto.NewPacket(s.ids.CfgRegistryData).Raw(proto.CompoundPayloadNBT(codec, false)).Frame(),
 		proto.NewPacket(s.ids.CfgFeatureFlags).VarInt(1).String("minecraft:vanilla").Frame(),
 		proto.NewPacket(s.ids.CfgFinish).Frame(),
@@ -219,7 +219,7 @@ func (s *session) spawn() error {
 	}
 	out := [][]byte{join}
 	if s.p >= p1_13 && s.p < p1_20_2 {
-		out = append(out, proto.NewPacket(s.ids.PluginMessage).String("minecraft:brand").String("anymcp").Frame())
+		out = append(out, proto.NewPacket(s.ids.PluginMessage).String("minecraft:brand").String("vecta").Frame())
 	}
 	out = append(out,
 		// invulnerable | flying | allow flying

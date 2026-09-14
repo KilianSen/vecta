@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"anymcp/internal/proto"
-	"anymcp/internal/registry"
+	"vecta/internal/proto"
+	"vecta/internal/registry"
 )
 
 // Client loader values. Unknown means the gateway could not tell (e.g. a

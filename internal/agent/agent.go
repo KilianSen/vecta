@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"anymcp/internal/registry"
+	"vecta/internal/registry"
 )
 
 type Config struct {

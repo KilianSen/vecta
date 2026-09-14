@@ -1,7 +1,7 @@
-# anymcp owner API (v1)
+# vecta owner API (v1)
 
-The anymcp server jar ([plugins/universal](../plugins/universal)) and the
-sidecar agent (`anymcp agent`) use this API. Requests go to the gateway's HTTP API,
+The vecta server jar ([plugins/universal](../plugins/universal)) and the
+sidecar agent (`vecta agent`) use this API. Requests go to the gateway's HTTP API,
 behind the NPM proxy host (e.g. `https://mc-api.example.com`). Every request
 except the public list carries `Authorization: Bearer <owner token>`.
 
@@ -102,7 +102,7 @@ The request body is capped at 4 KiB.
   "mode": "transfer",
   "host": "play.example.com",
   "port": 25565,
-  "cookieKey": "anymcp:route",
+  "cookieKey": "vecta:route",
   "cookie": "<base64 bytes>"
 }
 ```

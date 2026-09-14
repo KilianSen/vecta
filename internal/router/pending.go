@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"anymcp/internal/store"
+	"vecta/internal/store"
 )
 
 // Store buckets.

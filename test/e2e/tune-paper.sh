@@ -7,7 +7,7 @@
 #   throttle must be off (or PROXY protocol on) or rapid joins get rejected.
 # - paper-a receives PROXY protocol v2 from the gateway (proxyProtocol: true).
 set -u
-P=${PROJECT:-anymcp-test}
+P=${PROJECT:-vecta-test}
 WAIT=${TUNE_WAIT_SECONDS:-180}
 restart=""
 

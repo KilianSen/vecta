@@ -71,12 +71,12 @@ esac
 if [ -n "${MODS:-}" ]; then
   [ -n "$LOADER" ] || { echo "[hmc-run] MODS need a loader-qualified version"; exit 2; }
   for slug in $(echo "$MODS" | tr ',' ' '); do
-    url=$(curl -fsSL -A "anymcp-e2e" -G "https://api.modrinth.com/v2/project/$slug/version" \
+    url=$(curl -fsSL -A "vecta-e2e" -G "https://api.modrinth.com/v2/project/$slug/version" \
         --data-urlencode "loaders=[\"$LOADER\"]" --data-urlencode "game_versions=[\"$MC\"]" |
       jq -r '([.[] | select(.version_type == "release")] + .)[0].files | ((map(select(.primary)) + .)[0].url) // empty')
     [ -n "$url" ] || { echo "[hmc-run] no $LOADER $MC build of $slug"; exit 2; }
     file="$GAMEDIR/mods/$(basename "$url" | sed 's/%2B/+/g')"
-    curl -fsSL -A "anymcp-e2e" -o "$file" "$url"
+    curl -fsSL -A "vecta-e2e" -o "$file" "$url"
     echo "[hmc-run] mod $slug -> $(basename "$file")"
   done
 fi
