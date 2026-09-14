@@ -1,0 +1,17 @@
+# Portfolio manifest, read by Portico when it discovers this repo.
+title: VectaMine
+summary: >
+  One public address for many independent Minecraft Java servers. A Go gateway
+  that routes each player to a compatible backend by version, loader, and mods,
+  from 1.7.10 to 26.2, without proxying the game protocol.
+group: Self-Hosted & Infrastructure
+role: Creator
+year: 2026
+featured: true
+tags:
+  - go
+  - minecraft
+  - networking
+  - gateway
+  - docker
+  - self-hosted
