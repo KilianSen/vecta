@@ -1,0 +1,27 @@
+{
+  "listen": ":25565",
+  "apiListen": ":8080",
+  "domain": "${ANYMCP_DOMAIN}",
+  "cookieSecret": "${ANYMCP_COOKIE_SECRET}",
+  "acceptProxyProtocol": false,
+  "registrationTTL": "45s",
+  "healthInterval": "10s",
+  "pendingTTL": "5m",
+  "motd": "${ANYMCP_MOTD:-Join to pick a server}",
+
+  "dataFile": "/data/state.json",
+  "stickyTTL": "720h",
+  "personalizedMotd": false,
+  "rateLimit": {
+    "perSecond": 0,
+    "burst": 0,
+    "maxConnectionsPerIp": 0
+  },
+  "maxLobbySessions": 500,
+  "metricsToken": "${ANYMCP_METRICS_TOKEN}",
+
+  "owners": {
+    "admin": "${ANYMCP_OWNER_TOKEN}"
+  },
+  "servers": []
+}

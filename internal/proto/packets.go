@@ -168,17 +168,25 @@ var versionNames = map[int32]string{
 }
 
 // FMLModListRequest builds a login plugin request wrapping an FML2/FML3
-// S2CModList that advertises no mods, prompting the client to reply with its
-// own mod list (C2SModListReply).
-func FMLModListRequest(messageID int32, fml3 bool) []byte {
-	inner := AppendVarInt(nil, 1)  // S2CModList
-	inner = AppendVarInt(inner, 0) // mods
-	inner = AppendVarInt(inner, 0) // channels
-	inner = AppendVarInt(inner, 0) // registries
-	if fml3 {
-		inner = AppendVarInt(inner, 0) // data pack registries
+// S2CModList advertising the given mods and channels (and no registries),
+// prompting the client to reply with its own mod list (C2SModListReply). A
+// client rejects the list, closing the connection, when a strict mod's
+// channel is missing or has another version.
+func FMLModListRequest(messageID int32, fml3 bool, mods []string, channels []ForgeChannel) []byte {
+	inner := NewPacket(1) // S2CModList
+	inner.VarInt(int32(len(mods)))
+	for _, m := range mods {
+		inner.String(m)
 	}
-	wrapper := NewPacket(0).String("fml:handshake").ByteArray(inner)
+	inner.VarInt(int32(len(channels)))
+	for _, c := range channels {
+		inner.String(c.Name).String(c.Version)
+	}
+	inner.VarInt(0) // registries
+	if fml3 {
+		inner.VarInt(0) // data pack registries
+	}
+	wrapper := NewPacket(0).String("fml:handshake").ByteArray(inner.b)
 	data := wrapper.b[1:] // drop the dummy packet ID
 	return NewPacket(LoginPluginRequestID).VarInt(messageID).String("fml:loginwrapper").Raw(data).Frame()
 }

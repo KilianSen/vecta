@@ -1,10 +1,12 @@
 package router
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"anymcp/internal/limbo"
 	"anymcp/internal/match"
 	"anymcp/internal/proto"
 	"anymcp/internal/registry"
@@ -13,6 +15,14 @@ import (
 // lobby learns more about the client, then routes it (transfer on 1.20.5+,
 // remembered route + reconnect before that) or lets the player choose.
 func (r *Router) lobby(s *session) {
+	if !r.lobbySlots.tryAcquire() {
+		r.m.rejected.Inc("lobby-full")
+		s.send(proto.LoginDisconnect(proto.C("The lobby is full right now. Please try again in a moment.", "red")))
+		return
+	}
+	defer r.lobbySlots.release()
+	r.lobbyActive.Add(1)
+	defer r.lobbyActive.Add(-1)
 	client := r.handshakeClient(s)
 	if s.hs.Protocol >= proto.Proto1_20_5 {
 		r.lobbyConfig(s, client)
@@ -26,27 +36,121 @@ func (r *Router) lobby(s *session) {
 // screen.
 func (r *Router) lobbyLogin(s *session, client match.Client) {
 	marker := s.hs.Marker()
-	if r.cfg.ForgeModQuery && (marker == "FML2" || marker == "FML3") {
-		mods, err := r.queryForgeMods(s, marker == "FML3")
-		if err != nil {
+	if marker == "FML2" || marker == "FML3" {
+		mods, err := r.forgeModQuery(s, client, marker == "FML3")
+		switch {
+		case errors.Is(err, errNoForgeProbe):
+		case err != nil:
 			s.log.Info("forge mod query failed", "err", err)
-			return // the client closes the connection when it rejects our mod list
+			return // the client closed the connection after rejecting the mod list
+		default:
+			client.Mods = mods
 		}
-		client.Mods = mods
 	}
-	cands := match.Rank(client, r.visibleOnline())
-	if pick := match.Pick(cands, r.cfg.AutoMinScore, r.cfg.AutoMargin); pick != nil {
+	var cands []match.Candidate
+	for _, c := range match.Rank(client, r.visibleOnline()) {
+		if !r.pending.Rejected(s.login.Name, c.Server.ID) {
+			cands = append(cands, c)
+		}
+	}
+	if pick := match.Pick(cands, r.cfg.AutoMinScore, r.cfg.AutoMargin); pick != nil && !(s.forceMenu && limbo.Supported(s.hs.Protocol)) {
 		r.pending.Set(s.login.Name, pick.Server.ID, r.cfg.PendingTTL)
 		s.log.Info("matched, awaiting reconnect", "server", pick.Server.ID, "score", pick.Score)
 		s.send(proto.LoginDisconnect(r.reconnectText(pick.Server, cands, true)))
 		return
 	}
-	s.send(proto.LoginDisconnect(r.listText(s, cands)))
+	if len(cands) == 0 || !limbo.Supported(s.hs.Protocol) {
+		s.send(proto.LoginDisconnect(r.listText(s, cands)))
+		return
+	}
+	r.limboLobby(s, client)
 }
 
-func (r *Router) queryForgeMods(s *session, fml3 bool) (map[string]bool, error) {
+// limboLobby hosts a pre-1.20.5 client in an empty world with a clickable
+// server menu. Such clients cannot be transferred, so a choice is remembered
+// and the player reconnects once.
+func (r *Router) limboLobby(s *session, client match.Client) {
+	var uuid [16]byte
+	if s.login.HasUUID {
+		uuid = s.login.UUID
+	}
+	s.log.Info("player entered limbo")
+	r.m.lobby.Inc("limbo")
+	err := limbo.Serve(s.conn, s.br, limbo.Options{
+		Protocol: s.hs.Protocol,
+		Name:     s.login.Name,
+		UUID:     uuid,
+		Title:    "Choose a server",
+		Log:      s.log,
+		Entries: func() []limbo.Entry {
+			cands := match.Rank(client, r.visibleOnline())
+			entries := make([]limbo.Entry, 0, len(cands))
+			for i, c := range cands {
+				srv := c.Server
+				entries = append(entries, limbo.Entry{
+					ID:          srv.ID,
+					Name:        srv.Name,
+					Detail:      fmt.Sprintf("%s %s · %d/%d", srv.Loader, srv.VersionName, srv.Players, srv.MaxPlayers),
+					Recommended: i == 0 && c.Certain,
+				})
+			}
+			return entries
+		},
+		Choose: func(id string) (*proto.Text, string) {
+			srv, ok := r.reg.Get(id)
+			if !ok || !srv.Online || !srv.Accepts(s.hs.Protocol) {
+				return nil, "That server is not available right now."
+			}
+			r.pending.Set(s.login.Name, srv.ID, r.cfg.PendingTTL)
+			s.log.Info("player chose server in limbo", "server", srv.ID)
+			msg := proto.Join(
+				proto.C("You picked ", "gray"), proto.C(srv.Name, "green"), proto.C(".\n\n", "gray"),
+				proto.C("Reconnect now to join it.", "white"),
+			)
+			return &msg, ""
+		},
+	})
+	if err != nil {
+		s.log.Debug("limbo ended", "err", err)
+	}
+}
+
+var errNoForgeProbe = errors.New("no forge backend to probe with")
+
+// forgeModQuery asks a Forge 1.13-1.20.1 client for its mod list, presenting
+// the channel list of a candidate Forge backend. A client with the same pack
+// accepts it; one that closes the connection is incompatible with that
+// backend, which is then skipped for this player for a while.
+func (r *Router) forgeModQuery(s *session, client match.Client, fml3 bool) (map[string]bool, error) {
+	var probe *registry.Server
+	for _, c := range match.Rank(client, r.visibleOnline()) {
+		srv := c.Server
+		if len(srv.ForgeChannels) > 0 && !srv.ForgeChannelsTruncated && !r.pending.Rejected(s.login.Name, srv.ID) {
+			probe = &srv
+			break
+		}
+	}
+	var mods []string
+	var channels []proto.ForgeChannel
+	switch {
+	case probe != nil:
+		mods, channels = probe.Mods, probe.ForgeChannels
+	case r.cfg.ForgeModQuery:
+		// Empty lists: clients with strict mods will refuse this.
+	default:
+		return nil, errNoForgeProbe
+	}
+	got, err := r.queryForgeMods(s, fml3, mods, channels)
+	if err != nil && probe != nil {
+		r.pending.Reject(s.login.Name, probe.ID, 10*time.Minute)
+		s.log.Info("forge client rejected backend mod list", "server", probe.ID)
+	}
+	return got, err
+}
+
+func (r *Router) queryForgeMods(s *session, fml3 bool, mods []string, channels []proto.ForgeChannel) (map[string]bool, error) {
 	const msgID = 1
-	if err := s.send(proto.FMLModListRequest(msgID, fml3)); err != nil {
+	if err := s.send(proto.FMLModListRequest(msgID, fml3, mods, channels)); err != nil {
 		return nil, err
 	}
 	_, payload, err := proto.ReadFrame(s.br)
@@ -63,15 +167,15 @@ func (r *Router) queryForgeMods(s *session, fml3 bool) (map[string]bool, error) 
 	if ok, err := b.Bool(); err != nil || !ok {
 		return nil, fmt.Errorf("client did not understand fml handshake")
 	}
-	mods, channels, err := proto.ParseFMLModListReply(b.Remaining())
+	clientMods, clientChannels, err := proto.ParseFMLModListReply(b.Remaining())
 	if err != nil {
 		return nil, err
 	}
 	set := map[string]bool{}
-	for _, m := range mods {
+	for _, m := range clientMods {
 		set[m] = true
 	}
-	for _, c := range channels {
+	for _, c := range clientChannels {
 		ns, _, _ := strings.Cut(c, ":")
 		set[ns] = true
 	}
@@ -107,22 +211,49 @@ func (r *Router) lobbyConfig(s *session, client match.Client) {
 	if !waitLoginAck(frames) {
 		return
 	}
-	s.send(proto.NewPacket(proto.CfgPluginMessageOutID).String("minecraft:brand").String("anymcp").Frame())
+	// The NeoForge query must precede the brand: a NeoForge client that sees
+	// a brand first treats us as vanilla and disconnects if any of its mods
+	// require the server. It answers with its full channel list; other
+	// clients ignore the unknown channel.
+	s.send(
+		proto.NewPacket(proto.CfgPluginMessageOutID).String("neoforge:register").VarInt(0).Frame(),
+		proto.NewPacket(proto.CfgPluginMessageOutID).String("minecraft:brand").String("anymcp").Frame(),
+	)
 
-	brand, channels := probeClient(frames, r.cfg.ProbeWindow)
-	if l := brandLoader(brand); l != match.Unknown {
+	probe := probeClient(frames, r.cfg.ProbeWindow)
+	if l := brandLoader(probe.brand); !probe.neoforge && (l == match.Fabric || l == match.Quilt) && len(probe.channels) == 0 {
+		// Fabric API announces its channels only once the server starts the
+		// common registration handshake. c:version must come first: the client
+		// rejects a c:register whose version it has not negotiated. Only sent
+		// to Fabric clients; NeoForge ones disconnect on unnegotiated payloads.
+		s.send(
+			proto.NewPacket(proto.CfgPluginMessageOutID).String("minecraft:register").Raw([]byte("c:version\x00c:register")).Frame(),
+			proto.NewPacket(proto.CfgPluginMessageOutID).String("c:version").VarInt(1).VarInt(1).Frame(),
+			proto.NewPacket(proto.CfgPluginMessageOutID).String("c:register").VarInt(1).String("play").VarInt(0).Frame(),
+		)
+		more := probeClient(frames, r.cfg.ProbeWindow)
+		for ns := range more.channels {
+			probe.channels[ns] = true
+		}
+	}
+	if l := brandLoader(probe.brand); l != match.Unknown {
 		client.Loader = l
+	}
+	if probe.neoforge {
+		client.Loader = match.NeoForge
 	}
 	switch {
 	case client.Loader == match.Vanilla:
 		client.Mods = map[string]bool{}
-	case len(channels) > 0:
-		client.Mods = channels
+	case len(probe.channels) > 0:
+		client.Mods = probe.channels
 	}
-	s.log.Debug("client probed", "brand", brand, "loader", client.Loader, "channels", len(channels))
+	s.log.Debug("client probed", "brand", probe.brand, "loader", client.Loader,
+		"channels", len(probe.channels), "neoforge", probe.neoforge)
 
 	cands := match.Rank(client, r.visibleOnline())
-	if pick := match.Pick(cands, r.cfg.AutoMinScore, r.cfg.AutoMargin); pick != nil {
+	menuAvailable := s.hs.Protocol >= proto.Proto1_21_6
+	if pick := match.Pick(cands, r.cfg.AutoMinScore, r.cfg.AutoMargin); pick != nil && !(s.forceMenu && menuAvailable) {
 		s.log.Info("auto-matched", "server", pick.Server.ID, "score", pick.Score)
 		r.transfer(s, frames, pick.Server)
 		return
@@ -158,16 +289,21 @@ func waitLoginAck(frames <-chan []byte) bool {
 	}
 }
 
+type clientProbe struct {
+	brand    string
+	channels map[string]bool // channel namespaces (~ mod ids)
+	neoforge bool            // answered the neoforge:register query
+}
+
 // probeClient collects the client brand and registered channel namespaces.
-func probeClient(frames <-chan []byte, window time.Duration) (string, map[string]bool) {
-	brand := ""
-	channels := map[string]bool{}
+func probeClient(frames <-chan []byte, window time.Duration) clientProbe {
+	pr := clientProbe{channels: map[string]bool{}}
 	timeout := time.After(window)
 	for {
 		select {
 		case p, ok := <-frames:
 			if !ok {
-				return brand, channels
+				return pr
 			}
 			b := proto.NewBuffer(p)
 			if id, _ := b.VarInt(); id != proto.CfgPluginMessageInID {
@@ -179,22 +315,95 @@ func probeClient(frames <-chan []byte, window time.Duration) (string, map[string
 			}
 			switch ch {
 			case "minecraft:brand":
-				brand, _ = b.String(32767)
-			case "minecraft:register", "c:register", "fabric:register":
+				pr.brand, _ = b.String(32767)
+			case "neoforge:register":
+				pr.neoforge = true
+				for _, id := range parseNeoForgeQuery(b.Remaining()) {
+					if ns, _, ok := strings.Cut(id, ":"); ok && ns != "" {
+						pr.channels[ns] = true
+					}
+				}
+			case "c:register":
+				// Fabric common protocol: VarInt version, phase, identifier set.
+				if _, err := b.VarInt(); err != nil {
+					continue
+				}
+				if _, err := b.String(64); err != nil {
+					continue
+				}
+				n, err := b.VarInt()
+				if err != nil {
+					continue
+				}
+				for i := int32(0); i < n; i++ {
+					id, err := b.String(32767)
+					if err != nil {
+						break
+					}
+					if ns, _, ok := strings.Cut(id, ":"); ok && ns != "" {
+						pr.channels[ns] = true
+					}
+				}
+			case "c:version":
+			case "minecraft:register", "fabric:register":
 				for _, c := range strings.Split(string(b.Remaining()), "\x00") {
 					if ns, _, ok := strings.Cut(c, ":"); ok && ns != "" {
-						channels[ns] = true
+						pr.channels[ns] = true
 					}
 				}
 			default:
 				if ns, _, ok := strings.Cut(ch, ":"); ok && ns != "minecraft" {
-					channels[ns] = true
+					pr.channels[ns] = true
 				}
 			}
 		case <-timeout:
-			return brand, channels
+			return pr
 		}
 	}
+}
+
+// parseNeoForgeQuery decodes a NeoForge client's neoforge:register reply:
+// for each connection protocol, the payload ids it registered. Parsing stops
+// at the first malformed entry and returns what was read.
+func parseNeoForgeQuery(data []byte) []string {
+	var ids []string
+	b := proto.NewBuffer(data)
+	protocols, err := b.VarInt()
+	if err != nil {
+		return nil
+	}
+	for i := int32(0); i < protocols; i++ {
+		if _, err := b.VarInt(); err != nil { // protocol ordinal
+			return ids
+		}
+		n, err := b.VarInt()
+		if err != nil {
+			return ids
+		}
+		for j := int32(0); j < n; j++ {
+			id, err := b.String(32767)
+			if err != nil {
+				return ids
+			}
+			if _, err := b.String(32767); err != nil { // version
+				return ids
+			}
+			hasFlow, err := b.Bool()
+			if err != nil {
+				return ids
+			}
+			if hasFlow {
+				if _, err := b.VarInt(); err != nil {
+					return ids
+				}
+			}
+			if _, err := b.Bool(); err != nil { // optional
+				return ids
+			}
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func brandLoader(brand string) string {
@@ -320,6 +529,7 @@ func showDialog(s *session, cands []match.Candidate) []byte {
 // transfer stores a signed route cookie and sends the client back to the
 // gateway, which then pipes the new connection to srv.
 func (r *Router) transfer(s *session, frames <-chan []byte, srv registry.Server) {
+	r.m.lobby.Inc("transfer")
 	host := r.cfg.TransferHost
 	if host == "" {
 		host = r.cfg.Domain

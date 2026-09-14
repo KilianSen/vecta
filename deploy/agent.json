@@ -1,0 +1,16 @@
+{
+  "gateway": "${ANYMCP_GATEWAY_URL}",
+  "token": "${ANYMCP_TOKEN}",
+  "interval": "15s",
+  "modsDir": "/srv/mods",
+  "server": {
+    "id": "survival",
+    "name": "Survival",
+    "description": "Fabric 1.21.1",
+    "address": "${ANYMCP_SERVER_ADDRESS}",
+    "loader": "fabric",
+    "minProtocol": 767,
+    "maxProtocol": 767,
+    "requiredClientMods": []
+  }
+}

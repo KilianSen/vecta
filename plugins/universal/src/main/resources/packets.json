@@ -1,0 +1,701 @@
+{
+ "107": {
+  "_versions": [
+   "1.9"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "108": {
+  "_versions": [
+   "1.9.1"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "109": {
+  "_versions": [
+   "1.9.2"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "110": {
+  "_versions": [
+   "1.9.3",
+   "1.9.4"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "210": {
+  "_versions": [
+   "1.10",
+   "1.10.1",
+   "1.10.2"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "315": {
+  "_versions": [
+   "1.11"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "316": {
+  "_versions": [
+   "1.11.1",
+   "1.11.2"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "335": {
+  "_versions": [
+   "1.12"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "338": {
+  "_versions": [
+   "1.12.1"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "340": {
+  "_versions": [
+   "1.12.2"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "393": {
+  "_versions": [
+   "1.13"
+  ],
+  "chat": 14,
+  "disconnect": 27,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "401": {
+  "_versions": [
+   "1.13.1"
+  ],
+  "chat": 14,
+  "disconnect": 27,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "404": {
+  "_versions": [
+   "1.13.2"
+  ],
+  "chat": 14,
+  "disconnect": 27,
+  "inChat": 2,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "47": {
+  "_versions": [
+   "1.8",
+   "1.8.1",
+   "1.8.2",
+   "1.8.3",
+   "1.8.4",
+   "1.8.5",
+   "1.8.6",
+   "1.8.7",
+   "1.8.8",
+   "1.8.9"
+  ],
+  "chat": 2,
+  "disconnect": 64,
+  "inChat": 1,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "477": {
+  "_versions": [
+   "1.14"
+  ],
+  "chat": 14,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "480": {
+  "_versions": [
+   "1.14.1"
+  ],
+  "chat": 14,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "485": {
+  "_versions": [
+   "1.14.2"
+  ],
+  "chat": 14,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "490": {
+  "_versions": [
+   "1.14.3"
+  ],
+  "chat": 14,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "498": {
+  "_versions": [
+   "1.14.4"
+  ],
+  "chat": 14,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "5": {
+  "_versions": [
+   "1.7.6",
+   "1.7.7",
+   "1.7.8",
+   "1.7.9",
+   "1.7.10"
+  ],
+  "chat": 2,
+  "disconnect": 64,
+  "inChat": 1,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "573": {
+  "_versions": [
+   "1.15"
+  ],
+  "chat": 15,
+  "disconnect": 27,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "575": {
+  "_versions": [
+   "1.15.1"
+  ],
+  "chat": 15,
+  "disconnect": 27,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "578": {
+  "_versions": [
+   "1.15.2"
+  ],
+  "chat": 15,
+  "disconnect": 27,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "735": {
+  "_versions": [
+   "1.16"
+  ],
+  "chat": 14,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "736": {
+  "_versions": [
+   "1.16.1"
+  ],
+  "chat": 14,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "751": {
+  "_versions": [
+   "1.16.2"
+  ],
+  "chat": 14,
+  "disconnect": 25,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "753": {
+  "_versions": [
+   "1.16.3"
+  ],
+  "chat": 14,
+  "disconnect": 25,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "754": {
+  "_versions": [
+   "1.16.4",
+   "1.16.5"
+  ],
+  "chat": 14,
+  "disconnect": 25,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "755": {
+  "_versions": [
+   "1.17"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "756": {
+  "_versions": [
+   "1.17.1"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "757": {
+  "_versions": [
+   "1.18",
+   "1.18.1"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "758": {
+  "_versions": [
+   "1.18.2"
+  ],
+  "chat": 15,
+  "disconnect": 26,
+  "inChat": 3,
+  "inChatCommand": -1,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": -1,
+  "transfer": -1
+ },
+ "759": {
+  "_versions": [
+   "1.19"
+  ],
+  "chat": -1,
+  "disconnect": 23,
+  "inChat": 4,
+  "inChatCommand": 3,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": 95,
+  "transfer": -1
+ },
+ "760": {
+  "_versions": [
+   "1.19.1",
+   "1.19.2"
+  ],
+  "chat": -1,
+  "disconnect": 25,
+  "inChat": 5,
+  "inChatCommand": 4,
+  "inChatCommandSigned": -1,
+  "inChatSession": -1,
+  "storeCookie": -1,
+  "systemChat": 98,
+  "transfer": -1
+ },
+ "761": {
+  "_versions": [
+   "1.19.3"
+  ],
+  "chat": -1,
+  "disconnect": 23,
+  "inChat": 5,
+  "inChatCommand": 4,
+  "inChatCommandSigned": -1,
+  "inChatSession": 32,
+  "storeCookie": -1,
+  "systemChat": 96,
+  "transfer": -1
+ },
+ "762": {
+  "_versions": [
+   "1.19.4"
+  ],
+  "chat": -1,
+  "disconnect": 26,
+  "inChat": 5,
+  "inChatCommand": 4,
+  "inChatCommandSigned": -1,
+  "inChatSession": 6,
+  "storeCookie": -1,
+  "systemChat": 100,
+  "transfer": -1
+ },
+ "763": {
+  "_versions": [
+   "1.20",
+   "1.20.1"
+  ],
+  "chat": -1,
+  "disconnect": 26,
+  "inChat": 5,
+  "inChatCommand": 4,
+  "inChatCommandSigned": -1,
+  "inChatSession": 6,
+  "storeCookie": -1,
+  "systemChat": 100,
+  "transfer": -1
+ },
+ "764": {
+  "_versions": [
+   "1.20.2"
+  ],
+  "chat": -1,
+  "disconnect": 27,
+  "inChat": 5,
+  "inChatCommand": 4,
+  "inChatCommandSigned": -1,
+  "inChatSession": 6,
+  "storeCookie": -1,
+  "systemChat": 103,
+  "transfer": -1
+ },
+ "765": {
+  "_versions": [
+   "1.20.3",
+   "1.20.4"
+  ],
+  "chat": -1,
+  "disconnect": 27,
+  "inChat": 5,
+  "inChatCommand": 4,
+  "inChatCommandSigned": -1,
+  "inChatSession": 6,
+  "storeCookie": -1,
+  "systemChat": 105,
+  "transfer": -1
+ },
+ "766": {
+  "_versions": [
+   "1.20.5",
+   "1.20.6"
+  ],
+  "chat": -1,
+  "disconnect": 29,
+  "inChat": 6,
+  "inChatCommand": 4,
+  "inChatCommandSigned": 5,
+  "inChatSession": 7,
+  "storeCookie": 107,
+  "systemChat": 108,
+  "transfer": 115
+ },
+ "767": {
+  "_versions": [
+   "1.21",
+   "1.21.1"
+  ],
+  "chat": -1,
+  "disconnect": 29,
+  "inChat": 6,
+  "inChatCommand": 4,
+  "inChatCommandSigned": 5,
+  "inChatSession": 7,
+  "storeCookie": 107,
+  "systemChat": 108,
+  "transfer": 115
+ },
+ "768": {
+  "_versions": [
+   "1.21.2",
+   "1.21.3"
+  ],
+  "chat": -1,
+  "disconnect": 29,
+  "inChat": 7,
+  "inChatCommand": 5,
+  "inChatCommandSigned": 6,
+  "inChatSession": 8,
+  "storeCookie": 114,
+  "systemChat": 115,
+  "transfer": 122
+ },
+ "769": {
+  "_versions": [
+   "1.21.4"
+  ],
+  "chat": -1,
+  "disconnect": 29,
+  "inChat": 7,
+  "inChatCommand": 5,
+  "inChatCommandSigned": 6,
+  "inChatSession": 8,
+  "storeCookie": 114,
+  "systemChat": 115,
+  "transfer": 122
+ },
+ "770": {
+  "_versions": [
+   "1.21.5"
+  ],
+  "chat": -1,
+  "disconnect": 28,
+  "inChat": 7,
+  "inChatCommand": 5,
+  "inChatCommandSigned": 6,
+  "inChatSession": 8,
+  "storeCookie": 113,
+  "systemChat": 114,
+  "transfer": 122
+ },
+ "771": {
+  "_versions": [
+   "1.21.6"
+  ],
+  "chat": -1,
+  "disconnect": 28,
+  "inChat": 8,
+  "inChatCommand": 6,
+  "inChatCommandSigned": 7,
+  "inChatSession": 9,
+  "storeCookie": 113,
+  "systemChat": 114,
+  "transfer": 122
+ },
+ "772": {
+  "_versions": [
+   "1.21.7",
+   "1.21.8"
+  ],
+  "chat": -1,
+  "disconnect": 28,
+  "inChat": 8,
+  "inChatCommand": 6,
+  "inChatCommandSigned": 7,
+  "inChatSession": 9,
+  "storeCookie": 113,
+  "systemChat": 114,
+  "transfer": 122
+ },
+ "773": {
+  "_versions": [
+   "1.21.9",
+   "1.21.10"
+  ],
+  "chat": -1,
+  "disconnect": 32,
+  "inChat": 8,
+  "inChatCommand": 6,
+  "inChatCommandSigned": 7,
+  "inChatSession": 9,
+  "storeCookie": 118,
+  "systemChat": 119,
+  "transfer": 127
+ },
+ "774": {
+  "_versions": [
+   "1.21.11"
+  ],
+  "chat": -1,
+  "disconnect": 32,
+  "inChat": 8,
+  "inChatCommand": 6,
+  "inChatCommandSigned": 7,
+  "inChatSession": 9,
+  "storeCookie": 118,
+  "systemChat": 119,
+  "transfer": 127
+ }
+}

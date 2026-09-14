@@ -124,6 +124,18 @@ func score(c Client, cf string, clientMods map[string]bool, s registry.Server) (
 	sf := Family(s.Loader, c.Protocol)
 	serverMods := modSet(s.Mods)
 	required := modSet(s.RequiredClientMods)
+	// Channels reported by owner plugins: their namespaces are what clients
+	// announce, and required channels must be present on the client.
+	for _, ch := range s.Channels {
+		ns, _, ok := strings.Cut(ch.Name, ":")
+		if !ok || ignored[ns] || strings.HasPrefix(ns, "fabric-") {
+			continue
+		}
+		serverMods[ns] = true
+		if ch.Required {
+			required[ns] = true
+		}
+	}
 	cand := Candidate{Server: s, Certain: true}
 
 	// A modded server whose mods are all server-side (nothing required from

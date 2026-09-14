@@ -7,12 +7,13 @@ import (
 
 // NBT tag type IDs.
 const (
-	tagEnd      = 0
-	tagByte     = 1
-	tagInt      = 3
-	tagString   = 8
-	tagList     = 9
-	tagCompound = 10
+	tagEnd       = 0
+	tagByte      = 1
+	tagInt       = 3
+	tagString    = 8
+	tagList      = 9
+	tagCompound  = 10
+	tagLongArray = 12
 )
 
 // Field is one named entry of a Compound; order is preserved on the wire.
@@ -46,8 +47,26 @@ func tagID(v any) byte {
 		return tagCompound
 	case List:
 		return tagList
+	case []int64:
+		return tagLongArray
 	}
 	panic(fmt.Sprintf("nbt: unsupported type %T", v))
+}
+
+// NamedRootNBT encodes a compound with an empty root name, as used by the
+// protocol before 1.20.2.
+func NamedRootNBT(c Compound) []byte {
+	return appendNBT([]byte{tagCompound, 0, 0}, c)
+}
+
+// CompoundPayloadNBT wraps a pre-encoded compound payload (entries + end tag)
+// as network NBT, named (pre-1.20.2) or nameless.
+func CompoundPayloadNBT(payload []byte, named bool) []byte {
+	out := []byte{tagCompound}
+	if named {
+		out = append(out, 0, 0)
+	}
+	return append(out, payload...)
 }
 
 func appendNBT(b []byte, v any) []byte {
@@ -79,6 +98,12 @@ func appendNBT(b []byte, v any) []byte {
 		b = binary.BigEndian.AppendUint32(b, uint32(len(t)))
 		for _, e := range t {
 			b = appendNBT(b, e)
+		}
+		return b
+	case []int64:
+		b = binary.BigEndian.AppendUint32(b, uint32(len(t)))
+		for _, e := range t {
+			b = binary.BigEndian.AppendUint64(b, uint64(e))
 		}
 		return b
 	}

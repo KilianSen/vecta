@@ -101,6 +101,31 @@ func TestLoneCertainCandidatePickedDespiteLowScore(t *testing.T) {
 	}
 }
 
+// Channels reported by owner plugins: namespaces add overlap, required
+// channels exclude clients that lack them, optional ones don't.
+func TestPluginReportedChannels(t *testing.T) {
+	servers := []registry.Server{
+		{ID: "neo", Loader: "neoforge", MinProtocol: 767, MaxProtocol: 767, Mods: []string{"jei"},
+			Channels: []registry.Channel{
+				{Name: "create:main", Version: "6", Required: true},
+				{Name: "jei:recipes", Version: "3"},
+				{Name: "neoforge:register", Version: "1", Required: true}, // loader channel: ignored
+			}},
+		{ID: "paper", Loader: "paper", MinProtocol: 767, MaxProtocol: 767},
+	}
+	withCreate := Client{Protocol: 767, Loader: NeoForge, Mods: map[string]bool{"create": true, "jei": true}}
+	got := Rank(withCreate, servers)
+	if len(got) != 2 || got[0].Server.ID != "neo" || got[0].Score <= 50 {
+		t.Fatalf("client with create: %+v", got)
+	}
+	withoutCreate := Client{Protocol: 767, Loader: NeoForge, Mods: map[string]bool{"jei": true}}
+	for _, c := range Rank(withoutCreate, servers) {
+		if c.Server.ID == "neo" {
+			t.Fatal("client missing a required channel's mod must be excluded")
+		}
+	}
+}
+
 func TestAmbiguousNoPick(t *testing.T) {
 	s := []registry.Server{
 		{ID: "a", Loader: "paper", MinProtocol: 767, MaxProtocol: 767},

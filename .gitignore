@@ -1,3 +1,13 @@
 bin/
 *.exe
 test/e2e/anymcp
+test/e2e/node_modules/
+test/e2e/results/
+anymcp-state.json
+deploy/.env
+
+# minecraft-data cache for tools/limbogen
+.cache/
+
+# IDE
+.idea/

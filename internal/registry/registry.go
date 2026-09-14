@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"anymcp/internal/proto"
 )
 
 // Server describes one backend. The first block is owner-declared metadata,
@@ -27,6 +29,18 @@ type Server struct {
 	RequiredClientMods []string `json:"requiredClientMods,omitempty"`
 	Hidden             bool     `json:"hidden,omitempty"` // reachable by subdomain only
 	ProxyProtocol      bool     `json:"proxyProtocol,omitempty"`
+	// Guard means the backend only accepts connections carrying the gateway's
+	// signed PROXY v2 header (docs/guard-protocol.md). The key comes from the
+	// owner token, or GuardSecret for static servers.
+	Guard       bool   `json:"guard,omitempty"`
+	GuardSecret string `json:"guardSecret,omitempty"`
+
+	// Reported by the server jar or agent (see docs/owner-api.md).
+	Reporter    string            `json:"reporter,omitempty"`
+	Software    string            `json:"software,omitempty"`
+	Protocols   []int32           `json:"protocols,omitempty"` // exact accepted list; overrides the range
+	ModVersions map[string]string `json:"modVersions,omitempty"`
+	Channels    []Channel         `json:"channels,omitempty"`
 
 	Owner       string    `json:"owner"`
 	Static      bool      `json:"static,omitempty"`
@@ -36,12 +50,33 @@ type Server struct {
 	Players     int       `json:"players"`
 	MaxPlayers  int       `json:"maxPlayers"`
 	LastPing    time.Time `json:"lastPing,omitempty"`
-	ExpiresAt   time.Time `json:"expiresAt,omitempty"`
+	// ForgeChannels are the network channels a Forge 1.13-1.20.1 server
+	// advertises in its status ping, with exact versions.
+	ForgeChannels          []proto.ForgeChannel `json:"forgeChannels,omitempty"`
+	ForgeChannelsTruncated bool                 `json:"forgeChannelsTruncated,omitempty"`
+	ExpiresAt              time.Time            `json:"expiresAt,omitempty"`
 }
 
-// Accepts reports whether a client protocol is in the server's range. With no
-// declared range the server accepts exactly the protocol its ping reports.
+// Channel is a network channel/payload a server registers.
+type Channel struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+	// Required means clients without this channel cannot join.
+	Required bool `json:"required,omitempty"`
+}
+
+// Accepts reports whether a client protocol is accepted: by the exact
+// protocols list if reported, else by the declared range. With neither, the
+// server accepts exactly the protocol its ping reports.
 func (s *Server) Accepts(protocol int32) bool {
+	if len(s.Protocols) > 0 {
+		for _, p := range s.Protocols {
+			if p == protocol {
+				return true
+			}
+		}
+		return false
+	}
 	lo, hi := s.MinProtocol, s.MaxProtocol
 	if lo == 0 && hi == 0 {
 		return s.Protocol != 0 && protocol == s.Protocol
@@ -89,6 +124,13 @@ func Validate(s *Server) error {
 	for i, m := range s.RequiredClientMods {
 		s.RequiredClientMods[i] = strings.ToLower(m)
 	}
+	switch {
+	case len(s.Mods) > 2000, len(s.Channels) > 5000, len(s.Protocols) > 1000:
+		return errors.New("too many mods, channels or protocols")
+	}
+	for i := range s.Channels {
+		s.Channels[i].Name = strings.ToLower(s.Channels[i].Name)
+	}
 	return nil
 }
 
@@ -117,11 +159,13 @@ func (r *Registry) Upsert(owner string, s Server, ttl time.Duration) (Server, er
 	s.Owner = owner
 	s.Static = ttl <= 0
 	if !s.Static {
+		s.GuardSecret = "" // registered servers are keyed by their owner token
 		s.ExpiresAt = r.now().Add(ttl)
 	}
 	if exists && old.Address == s.Address {
 		s.Online, s.VersionName, s.Protocol = old.Online, old.VersionName, old.Protocol
 		s.Players, s.MaxPlayers, s.LastPing = old.Players, old.MaxPlayers, old.LastPing
+		s.ForgeChannels, s.ForgeChannelsTruncated = old.ForgeChannels, old.ForgeChannelsTruncated
 	}
 	r.servers[s.ID] = &s
 	return s, nil
@@ -190,6 +234,9 @@ type Health struct {
 	Players     int
 	MaxPlayers  int
 	Mods        []string // discovered from forgeData/modinfo, used if none declared
+
+	ForgeChannels          []proto.ForgeChannel
+	ForgeChannelsTruncated bool
 }
 
 func (r *Registry) SetHealth(id, address string, h Health) {
@@ -207,6 +254,7 @@ func (r *Registry) SetHealth(id, address string, h Health) {
 		if len(s.Mods) == 0 && len(h.Mods) > 0 {
 			s.Mods = h.Mods
 		}
+		s.ForgeChannels, s.ForgeChannelsTruncated = h.ForgeChannels, h.ForgeChannelsTruncated
 	}
 }
 

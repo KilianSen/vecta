@@ -60,9 +60,16 @@ type harness struct {
 	t    *testing.T
 	addr string
 	reg  *registry.Registry
+	r    *Router
 }
 
 func startRouter(t *testing.T, servers ...registry.Server) *harness {
+	t.Helper()
+	return startRouterWith(t, nil, servers...)
+}
+
+// startRouterWith lets a test adjust the router config.
+func startRouterWith(t *testing.T, tweak func(*Config), servers ...registry.Server) *harness {
 	t.Helper()
 	reg := registry.New()
 	for _, s := range servers {
@@ -78,9 +85,13 @@ func startRouter(t *testing.T, servers ...registry.Server) *harness {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	r := New(Config{Domain: "play.test", CookieSecret: []byte("secret"), ProbeWindow: 300 * time.Millisecond}, reg, log)
+	cfg := Config{Domain: "play.test", CookieSecret: []byte("secret"), ProbeWindow: 300 * time.Millisecond}
+	if tweak != nil {
+		tweak(&cfg)
+	}
+	r := New(cfg, reg, log)
 	go r.ServeListener(ctx, ln)
-	return &harness{t: t, addr: ln.Addr().String(), reg: reg}
+	return &harness{t: t, addr: ln.Addr().String(), reg: reg, r: r}
 }
 
 type client struct {
@@ -220,6 +231,112 @@ func TestLobbyAutoMatchTransferAndCookie(t *testing.T) {
 	}
 }
 
+// TestNeoForgeClientProbedBeforeBrand checks the NeoForge query precedes the
+// brand (else NeoForge clients with required mods disconnect) and that the
+// channel list in the reply drives matching.
+func TestNeoForgeClientProbedBeforeBrand(t *testing.T) {
+	neo, paper := startBackend(t), startBackend(t)
+	h := startRouter(t,
+		registry.Server{ID: "neo-pack", Name: "Neo Pack", Address: neo.addr, Loader: "neoforge", MinProtocol: 767, MaxProtocol: 767, Mods: []string{"jei"}},
+		registry.Server{ID: "paper", Name: "Paper", Address: paper.addr, Loader: "paper", MinProtocol: 767, MaxProtocol: 767},
+	)
+	c := h.dial()
+	c.login(767, "play.test", proto.IntentLogin, "Neo")
+	c.expect(proto.LoginSuccessID)
+	c.send(proto.NewPacket(proto.LoginAcknowledgedID).Frame())
+
+	b := c.expect(proto.CfgPluginMessageOutID)
+	if ch, _ := b.String(256); ch != "neoforge:register" {
+		t.Fatalf("first plugin message is %q, want neoforge:register", ch)
+	}
+	// Reply: one protocol with one required payload jei:main.
+	reply := proto.NewPacket(0).VarInt(1).VarInt(4).VarInt(1).
+		String("jei:main").String("1").Bool(true).VarInt(1).Bool(false).Frame()
+	_, body, _ := proto.ReadFrame(bufio.NewReader(bytes.NewReader(reply)))
+	c.send(
+		proto.NewPacket(proto.CfgPluginMessageInID).String("neoforge:register").Raw(body[1:]).Frame(),
+		proto.NewPacket(proto.CfgPluginMessageInID).String("minecraft:brand").String("neoforge").Frame(),
+	)
+
+	b = c.expect(proto.CfgStoreCookieID)
+	b.String(256)
+	cookie, _ := b.ByteArray(5120)
+	b = c.expect(proto.CfgTransferID)
+	host, _ := b.String(256)
+	c.c.Close()
+
+	c = h.dial()
+	c.login(767, host, proto.IntentTransfer, "Neo")
+	c.expect(proto.LoginCookieRequestID)
+	c.send(proto.NewPacket(proto.LoginCookieResponseID).String(CookieKey).Bool(true).ByteArray(cookie).Frame())
+	c.expectBackend()
+	waitFrames(t, neo)
+}
+
+// TestFabricCommonRegisterHandshake: a real Fabric client reveals its play
+// channels only after the server's c:version and c:register.
+func TestFabricCommonRegisterHandshake(t *testing.T) {
+	vanilla, pack := startBackend(t), startBackend(t)
+	h := startRouter(t, fabricPackServers(vanilla.addr, pack.addr)...)
+	c := h.dial()
+	c.login(767, "play.test", proto.IntentLogin, "RealFabric")
+	c.expect(proto.LoginSuccessID)
+	c.send(
+		proto.NewPacket(proto.LoginAcknowledgedID).Frame(),
+		proto.NewPacket(proto.CfgPluginMessageInID).String("minecraft:brand").String("fabric").Frame(),
+	)
+	var sawVersion bool
+	for {
+		b := c.expect(proto.CfgPluginMessageOutID)
+		ch, _ := b.String(256)
+		if ch == "c:version" {
+			sawVersion = true
+		}
+		if ch == "c:register" {
+			break
+		}
+	}
+	if !sawVersion {
+		t.Fatal("c:register sent before c:version")
+	}
+	c.send(
+		proto.NewPacket(proto.CfgPluginMessageInID).String("c:version").VarInt(1).VarInt(1).Frame(),
+		proto.NewPacket(proto.CfgPluginMessageInID).String("c:register").VarInt(1).String("play").
+			VarInt(2).String("create:main").String("fabric:registry/sync").Frame(),
+	)
+	b := c.expect(proto.CfgStoreCookieID)
+	b.String(256)
+	cookie, _ := b.ByteArray(5120)
+	c.expect(proto.CfgTransferID)
+	c.c.Close()
+
+	c = h.dial()
+	c.login(767, "play.test", proto.IntentTransfer, "RealFabric")
+	c.expect(proto.LoginCookieRequestID)
+	c.send(proto.NewPacket(proto.LoginCookieResponseID).String(CookieKey).Bool(true).ByteArray(cookie).Frame())
+	c.expectBackend()
+	waitFrames(t, pack)
+}
+
+func TestParseNeoForgeQuery(t *testing.T) {
+	reply := proto.NewPacket(0).VarInt(2).
+		VarInt(4).VarInt(2).
+		String("jei:main").String("1").Bool(false).Bool(true).
+		String("create:sync").String("2").Bool(true).VarInt(0).Bool(false).
+		VarInt(1).VarInt(1).
+		String("mekanism:net").String("10").Bool(false).Bool(false).
+		Frame()
+	_, body, _ := proto.ReadFrame(bufio.NewReader(bytes.NewReader(reply)))
+	got := parseNeoForgeQuery(body[1:])
+	want := []string{"jei:main", "create:sync", "mekanism:net"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	if ids := parseNeoForgeQuery(body[1:8]); len(ids) > 1 {
+		t.Fatalf("truncated input parsed too much: %v", ids)
+	}
+}
+
 func TestCookieForOtherPlayerRejected(t *testing.T) {
 	vanilla, pack := startBackend(t), startBackend(t)
 	h := startRouter(t, fabricPackServers(vanilla.addr, pack.addr)...)
@@ -257,7 +374,27 @@ func TestDialogSelection(t *testing.T) {
 	c.expect(proto.CfgTransferID)
 }
 
-func TestLegacyClientGetsAddressList(t *testing.T) {
+// readUntil reads frames until one contains all of the given substrings.
+func (c *client) readUntil(subs ...string) []byte {
+	c.t.Helper()
+	for i := 0; i < 50; i++ {
+		_, p, err := proto.ReadFrame(c.br)
+		if err != nil {
+			c.t.Fatalf("waiting for %q: %v", subs, err)
+		}
+		ok := true
+		for _, s := range subs {
+			ok = ok && bytes.Contains(p, []byte(s))
+		}
+		if ok {
+			return p
+		}
+	}
+	c.t.Fatalf("no frame containing %q", subs)
+	return nil
+}
+
+func TestLegacyClientLimboMenuThenReconnect(t *testing.T) {
 	a, b := startBackend(t), startBackend(t)
 	h := startRouter(t,
 		registry.Server{ID: "alpha", Name: "Alpha", Address: a.addr, MinProtocol: 763, MaxProtocol: 763},
@@ -265,11 +402,117 @@ func TestLegacyClientGetsAddressList(t *testing.T) {
 	)
 	c := h.dial()
 	c.login(763, "play.test", proto.IntentLogin, "Old")
+	c.expect(proto.LoginSuccessID)
+	c.readUntil("/join alpha")
+	c.readUntil("/join beta")
+	// 1.20.1 chat_command (0x04): command, timestamp, salt, no signatures, ack state.
+	c.send(proto.NewPacket(0x04).String("join beta").Int64(0).Int64(0).VarInt(0).VarInt(0).Raw(make([]byte, 3)).Frame())
+	c.readUntil("Reconnect now")
+	c.c.Close()
+
+	c = h.dial()
+	c.login(763, "play.test", proto.IntentLogin, "Old")
+	c.expectBackend()
+	if got := waitFrames(t, b); len(got) != 2 {
+		t.Fatalf("beta got %d frames", len(got))
+	}
+}
+
+func TestLobbyHostForcesMenu(t *testing.T) {
+	a := startBackend(t)
+	h := startRouter(t,
+		registry.Server{ID: "alpha", Name: "Alpha", Address: a.addr, MinProtocol: 763, MaxProtocol: 763},
+		registry.Server{ID: "newer", Name: "Newer", Address: a.addr, MinProtocol: 774, MaxProtocol: 774},
+	)
+	c := h.dial()
+	c.login(763, "lobby.play.test", proto.IntentLogin, "Chooser")
+	c.expect(proto.LoginSuccessID)
+	c.readUntil("/join alpha")
+}
+
+// forgeServers registers two Forge 1.20.1 packs with advertised channels.
+func forgeServers(t *testing.T) (*harness, *backend) {
+	create := startBackend(t)
+	mek := startBackend(t)
+	h := startRouter(t,
+		registry.Server{ID: "create-pack", Name: "Create Pack", Address: create.addr, Loader: "forge", MinProtocol: 763, MaxProtocol: 763, Mods: []string{"create"}},
+		registry.Server{ID: "mek-pack", Name: "Mek Pack", Address: mek.addr, Loader: "forge", MinProtocol: 763, MaxProtocol: 763, Mods: []string{"mekanism"}},
+	)
+	h.reg.SetHealth("create-pack", create.addr, registry.Health{Online: true, Protocol: 763, VersionName: "test",
+		ForgeChannels: []proto.ForgeChannel{{Name: "create:main", Version: "1"}}})
+	h.reg.SetHealth("mek-pack", mek.addr, registry.Health{Online: true, Protocol: 763, VersionName: "test",
+		ForgeChannels: []proto.ForgeChannel{{Name: "mekanism:network", Version: "10.4"}}})
+	return h, create
+}
+
+// readFMLQuery reads the gateway's S2CModList and returns the message id and
+// the inner handshake bytes.
+func (c *client) readFMLQuery() (int32, []byte) {
+	c.t.Helper()
+	b := c.expect(proto.LoginPluginRequestID)
+	id, _ := b.VarInt()
+	if ch, _ := b.String(256); ch != "fml:loginwrapper" {
+		c.t.Fatalf("channel %q", ch)
+	}
+	b.String(256)
+	inner, _ := b.ByteArray(1 << 20)
+	return id, inner
+}
+
+func (c *client) replyFMLMods(msgID int32, mods ...string) {
+	inner := proto.NewPacket(2).VarInt(int32(len(mods)))
+	for _, m := range mods {
+		inner.String(m)
+	}
+	inner.VarInt(1).String(mods[0] + ":main").String("1").VarInt(0)
+	payload := inner.Frame()
+	_, body, _ := proto.ReadFrame(bufio.NewReader(bytes.NewReader(payload)))
+	wrapper := proto.NewPacket(proto.LoginPluginResponseID).VarInt(msgID).Bool(true).
+		String("fml:handshake").ByteArray(body)
+	c.send(wrapper.Frame())
+}
+
+func TestForgeClientQueriedWithBackendChannels(t *testing.T) {
+	h, _ := forgeServers(t)
+	c := h.dial()
+	c.login(763, "play.test\x00FML3\x00", proto.IntentLogin, "Forgey")
+	id, inner := c.readFMLQuery()
+	if !bytes.Contains(inner, []byte("create:main")) && !bytes.Contains(inner, []byte("mekanism:network")) {
+		t.Fatalf("query lacks backend channels: % x", inner)
+	}
+	c.replyFMLMods(id, "create")
 	reason, _ := c.expect(proto.LoginDisconnectID).String(262144)
-	for _, want := range []string{"alpha.play.test", "beta.play.test"} {
-		if !strings.Contains(reason, want) {
-			t.Fatalf("disconnect %s missing %q", reason, want)
-		}
+	if !strings.Contains(reason, "Create Pack") {
+		t.Fatalf("expected match with Create Pack, got %s", reason)
+	}
+}
+
+func TestForgeRejectionSkipsBackendNextTime(t *testing.T) {
+	h, _ := forgeServers(t)
+	c := h.dial()
+	c.login(763, "play.test\x00FML3\x00", proto.IntentLogin, "Picky")
+	_, first := c.readFMLQuery()
+	c.c.Close() // client refused that mod list
+
+	firstWasCreate := bytes.Contains(first, []byte("create:main"))
+	time.Sleep(100 * time.Millisecond)
+	c = h.dial()
+	c.login(763, "play.test\x00FML3\x00", proto.IntentLogin, "Picky")
+	_, second := c.readFMLQuery()
+	if bytes.Contains(second, []byte("create:main")) == firstWasCreate {
+		t.Fatalf("second query probed the rejected backend again")
+	}
+}
+
+func TestTooOldClientGetsExplanation(t *testing.T) {
+	a := startBackend(t)
+	h := startRouter(t, registry.Server{ID: "alpha", Name: "Alpha", Address: a.addr, MinProtocol: 767, MaxProtocol: 767},
+		registry.Server{ID: "beta", Name: "Beta", Address: a.addr, MinProtocol: 767, MaxProtocol: 767})
+	c := h.dial()
+	c.login(47, "play.test", proto.IntentLogin, "Ancient")
+	reason, _ := c.expect(proto.LoginDisconnectID).String(262144)
+	if !strings.Contains(reason, "No online server accepts 1.8.x") {
+		t.Fatalf("disconnect %s", reason)
 	}
 }
 

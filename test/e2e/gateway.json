@@ -8,11 +8,18 @@
   "registrationTTL": "30s",
   "healthInterval": "5s",
   "probeWindow": "1500ms",
+  "pendingTTL": "10m",
+  "stickyTTL": "-1s",
+  "dataFile": "/tmp/anymcp-state.json",
+  "metricsToken": "e2e-metrics",
   "motd": "anymcp e2e",
   "owners": {
     "owner-b": "tok-b",
     "owner-d": "tok-d",
-    "owner-e": "tok-e"
+    "owner-e": "tok-e",
+    "owner-f": "tok-f",
+    "owner-l": "tok-l",
+    "owner-plugin": "tok-plugin"
   },
   "servers": [
     {

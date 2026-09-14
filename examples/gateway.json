@@ -3,18 +3,35 @@
   "apiListen": ":8080",
   "domain": "play.example.com",
   "cookieSecret": "replace-with-a-long-random-string",
-  "acceptProxyProtocol": false,
+  "acceptProxyProtocol": true,
   "registrationTTL": "45s",
   "healthInterval": "10s",
   "autoMinScore": 50,
   "autoMargin": 15,
   "probeWindow": "1500ms",
-  "pendingTTL": "3m",
+  "pendingTTL": "5m",
   "forgeModQuery": false,
   "motd": "Example network - join to pick a server",
+
+  "dataFile": "/var/lib/anymcp/state.json",
+  "stickyTTL": "720h",
+  "personalizedMotd": true,
+  "rateLimit": {
+    "perSecond": 2,
+    "burst": 10,
+    "maxConnectionsPerIp": 8
+  },
+  "maxLobbySessions": 500,
+  "allowedNetworks": ["10.0.0.0/8", "192.168.0.0/16"],
+  "allowLoopbackBackends": false,
+  "metricsToken": "replace-with-a-scrape-token",
+
   "owners": {
     "alice": "replace-with-alice-token",
-    "bob": "replace-with-bob-token"
+    "bob": {
+      "token": "replace-with-bob-token",
+      "allowedNetworks": ["10.20.0.0/16"]
+    }
   },
   "servers": [
     {
@@ -25,6 +42,16 @@
       "loader": "paper",
       "minProtocol": 767,
       "maxProtocol": 776
+    },
+    {
+      "id": "creative",
+      "name": "Creative",
+      "address": "10.0.0.21:25565",
+      "loader": "paper",
+      "minProtocol": 767,
+      "maxProtocol": 776,
+      "guard": true,
+      "guardSecret": "replace-with-a-shared-secret-matching-the-jars-token"
     }
   ]
 }

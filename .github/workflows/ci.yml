@@ -1,0 +1,110 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # nightly e2e
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: fuzz parsers (short)
+        run: |
+          for t in FuzzReadFrame FuzzParseHandshake FuzzParseLoginStart FuzzParseFMLModListReply FuzzForgeDataDecode FuzzBufferReads; do
+            go test -run '^$' -fuzz "^$t\$" -fuzztime 30s ./internal/proto
+          done
+          for t in FuzzReadProxyHeader FuzzParseNeoForgeQuery FuzzVerifyRoute; do
+            go test -run '^$' -fuzz "^$t\$" -fuzztime 30s ./internal/router
+          done
+          go test -run '^$' -fuzz '^FuzzVerify$' -fuzztime 30s ./internal/guard
+      - name: generated tables are up to date
+        run: |
+          python3 tools/limbogen/gen.py /tmp/minecraft-data
+          git diff --exit-code internal/limbo plugins/universal/src/main/resources/packets.json
+
+  jar:
+    # The anymcp server jar: Java 8 bytecode, self-test, uploaded as an artifact.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: sh plugins/universal/build.sh
+        env:
+          VERSION: ${{ github.ref_name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anymcp-jar
+          path: plugins/universal/build/anymcp.jar
+
+  e2e:
+    # Needs a self-hosted runner labeled anymcp-e2e with ssh access to the
+    # Docker host and a docker context pointing at it (see test/e2e/run.sh).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: unit
+    runs-on: [self-hosted, anymcp-e2e]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix test/e2e
+      - run: bash test/e2e/run.sh
+        env:
+          E2E_HOST: ${{ vars.E2E_HOST }}
+          GW_HOST: ${{ vars.GW_HOST }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results
+          path: test/e2e/results/
+
+  image:
+    # Builds the multi-arch image on every push; publishes it to GHCR for
+    # version tags (v1.2.3 -> ghcr.io/<owner>/<repo>:1.2.3 and :latest).
+    needs: unit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}

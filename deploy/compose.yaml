@@ -1,0 +1,50 @@
+# anymcp gateway with Docker Compose.
+#
+#   cp .env.example .env        # fill in domain, secrets, tokens
+#   docker compose up -d --build
+#   docker compose logs -f
+#
+# gateway.json is read with ${VAR} expansion from the container environment
+# (.env). State (remembered routes, sticky servers) lives in the anymcp-data
+# volume.
+name: anymcp
+
+services:
+  anymcp:
+    image: ${ANYMCP_IMAGE:-anymcp:latest}
+    build:
+      context: ..
+      args:
+        VERSION: ${ANYMCP_VERSION:-dev}
+    restart: unless-stopped
+    command: ["gateway", "-config", "/etc/anymcp/gateway.json"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./gateway.json:/etc/anymcp/gateway.json:ro
+      - anymcp-data:/data
+    ports:
+      - "${MC_PORT:-25565}:25565"   # Minecraft (NPM stream target)
+      - "${API_PORT:-8080}:8080"    # owner API, status page, /metrics (NPM proxy host target)
+    # Nginx Proxy Manager in Docker on the same host: remove "ports" above,
+    # uncomment the networks below, and point NPM's stream at anymcp:25565
+    # and its proxy host at anymcp:8080.
+    # networks: [default, npm]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  anymcp-data:
+
+# networks:
+#   npm:
+#     external: true
+#     name: npm_default   # `docker network ls` shows your NPM network's name

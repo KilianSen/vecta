@@ -12,11 +12,15 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"anymcp/internal/guard"
 	"anymcp/internal/match"
+	"anymcp/internal/metrics"
 	"anymcp/internal/proto"
 	"anymcp/internal/registry"
+	"anymcp/internal/store"
 )
 
 type Config struct {
@@ -39,13 +43,52 @@ type Config struct {
 	PendingTTL          time.Duration
 	ForgeModQuery       bool
 	MOTD                string
+	// Store persists remembered routes and preferences (nil: memory only).
+	Store *store.Store
+
+	// Per-client-IP limits. Only useful when the router sees real client
+	// IPs (directly or through PROXY protocol). Zero disables each limit.
+	RateLimitPerSecond  float64
+	RateLimitBurst      int
+	MaxConnectionsPerIP int
+	// MaxLobbySessions caps concurrent lobby/limbo sessions (0: unlimited).
+	MaxLobbySessions int
+	// StickyTTL remembers each player's last server and sends them back
+	// there on their next plain join (0: 30 days, negative: disabled).
+	StickyTTL time.Duration
+	// PersonalizedMOTD shows "next join"/"last played" in the server list,
+	// looked up by client IP. Enable only with real client IPs.
+	PersonalizedMOTD bool
+	// Dial connects to backends (nil: direct dialing). Use it to enforce the
+	// address policy on owner-registered servers.
+	Dial registry.Dialer
+	// GuardKeys provides the signing key for servers with guard enabled.
+	GuardKeys registry.GuardKeys
+	// Metrics receives router counters (nil: disabled).
+	Metrics *metrics.Registry
+}
+
+type routerMetrics struct {
+	connections  *metrics.CounterVec
+	rejected     *metrics.CounterVec
+	routes       *metrics.CounterVec
+	lobby        *metrics.CounterVec
+	dialFailures *metrics.CounterVec
+	tickets      *metrics.CounterVec
 }
 
 type Router struct {
-	cfg     Config
-	reg     *registry.Registry
-	pending *pendingRoutes
-	log     *slog.Logger
+	cfg         Config
+	reg         *registry.Registry
+	pending     *pendingRoutes
+	log         *slog.Logger
+	limiter     *limiter
+	lobbySlots  semaphore
+	lobbyActive atomic.Int64
+	m           routerMetrics
+
+	statusMu    sync.Mutex
+	statusCache map[int32]statusSummary
 }
 
 func New(cfg Config, reg *registry.Registry, log *slog.Logger) *Router {
@@ -61,8 +104,35 @@ func New(cfg Config, reg *registry.Registry, log *slog.Logger) *Router {
 	if cfg.PendingTTL == 0 {
 		cfg.PendingTTL = 3 * time.Minute
 	}
+	switch {
+	case cfg.StickyTTL == 0:
+		cfg.StickyTTL = 30 * 24 * time.Hour
+	case cfg.StickyTTL < 0:
+		cfg.StickyTTL = 0
+	}
 	cfg.Domain = strings.ToLower(strings.TrimSuffix(cfg.Domain, "."))
-	return &Router{cfg: cfg, reg: reg, pending: newPendingRoutes(), log: log}
+	r := &Router{
+		cfg:         cfg,
+		reg:         reg,
+		pending:     newPendingRoutes(cfg.Store),
+		log:         log,
+		limiter:     newLimiter(cfg.RateLimitPerSecond, cfg.RateLimitBurst, cfg.MaxConnectionsPerIP),
+		lobbySlots:  newSemaphore(cfg.MaxLobbySessions),
+		statusCache: map[int32]statusSummary{},
+	}
+	if m := cfg.Metrics; m != nil {
+		r.m = routerMetrics{
+			connections:  m.Counter("anymcp_connections_total", "Player connections by handshake intent", "intent"),
+			rejected:     m.Counter("anymcp_connections_rejected_total", "Connections refused by limits", "reason"),
+			routes:       m.Counter("anymcp_routes_total", "Players piped to a backend", "via", "server"),
+			lobby:        m.Counter("anymcp_lobby_outcomes_total", "How lobby sessions ended", "outcome"),
+			dialFailures: m.Counter("anymcp_backend_dial_failures_total", "Failed backend dials", "server"),
+			tickets:      m.Counter("anymcp_transfer_tickets_total", "Transfer tickets issued via the owner API", "mode"),
+		}
+		m.GaugeFunc("anymcp_lobby_sessions_active", "Players currently in the lobby or limbo",
+			func() float64 { return float64(r.lobbyActive.Load()) })
+	}
+	return r
 }
 
 func (r *Router) Serve(ctx context.Context) error {
@@ -89,6 +159,7 @@ func (r *Router) ServeListener(ctx context.Context, ln net.Listener) error {
 				return
 			case <-t.C:
 				r.pending.prune()
+				r.limiter.sweep()
 			}
 		}
 	}()
@@ -118,6 +189,9 @@ type session struct {
 	login    proto.LoginStart
 	loginRaw []byte
 	log      *slog.Logger
+	// forceMenu is set for lobby.<domain>: the player wants to choose, so
+	// menus are shown even when a single best match exists.
+	forceMenu bool
 }
 
 func (s *session) send(frames ...[]byte) error {
@@ -127,6 +201,15 @@ func (s *session) send(frames ...[]byte) error {
 		}
 	}
 	return nil
+}
+
+// clientIP is the client's IP without port.
+func (s *session) clientIP() string {
+	host, _, err := net.SplitHostPort(s.client.String())
+	if err != nil {
+		return s.client.String()
+	}
+	return host
 }
 
 func (r *Router) handle(conn net.Conn) {
@@ -144,6 +227,14 @@ func (r *Router) handle(conn net.Conn) {
 			s.client = addr
 		}
 	}
+	release, reason := r.limiter.acquire(s.clientIP())
+	if reason != "" {
+		r.m.rejected.Inc(reason)
+		r.log.Debug("connection refused by limits", "client", s.clientIP(), "reason", reason)
+		return
+	}
+	defer release()
+
 	if b, err := s.br.Peek(1); err != nil || b[0] == 0xFE {
 		return // closed or pre-1.7 legacy ping
 	}
@@ -161,8 +252,10 @@ func (r *Router) handle(conn net.Conn) {
 
 	switch s.hs.Intent {
 	case proto.IntentStatus:
+		r.m.connections.Inc("status")
 		r.handleStatus(s)
 	case proto.IntentLogin, proto.IntentTransfer:
+		r.m.connections.Inc(map[int32]string{proto.IntentLogin: "login", proto.IntentTransfer: "transfer"}[s.hs.Intent])
 		r.handleLogin(s)
 	}
 }
@@ -194,7 +287,7 @@ func (r *Router) handleStatus(s *session) {
 	if _, payload, err := proto.ReadFrame(s.br); err != nil || len(payload) != 1 {
 		return
 	}
-	s.send(proto.StatusResponse(r.statusDoc(s.hs.Protocol)))
+	s.send(proto.StatusResponse(r.statusDoc(s.hs.Protocol, s.clientIP())))
 	_, payload, err := proto.ReadFrame(s.br)
 	if err != nil || len(payload) < 1 || payload[0] != 0x01 {
 		return
@@ -203,43 +296,96 @@ func (r *Router) handleStatus(s *session) {
 	s.send(pong)
 }
 
-func (r *Router) statusDoc(protocol int32) map[string]any {
-	online := r.reg.Online()
-	players, maxPlayers := 0, 0
-	type sample struct {
-		Name string `json:"name"`
-		ID   string `json:"id"`
+type statusSample struct {
+	Name string `json:"name"`
+	ID   string `json:"id"`
+}
+
+// statusSummary is the per-protocol part of the status response, cached
+// briefly so server-list refresh floods don't rebuild it every time.
+type statusSummary struct {
+	built      time.Time
+	players    int
+	maxPlayers int
+	compatible int
+	samples    []statusSample
+}
+
+const statusCacheTTL = 2 * time.Second
+
+func (r *Router) summary(protocol int32) statusSummary {
+	r.statusMu.Lock()
+	defer r.statusMu.Unlock()
+	if sum, ok := r.statusCache[protocol]; ok && time.Since(sum.built) < statusCacheTTL {
+		return sum
 	}
-	var samples []sample
-	compatible := 0
-	for _, srv := range online {
+	if len(r.statusCache) > 256 {
+		r.statusCache = map[int32]statusSummary{}
+	}
+	sum := statusSummary{built: time.Now()}
+	for _, srv := range r.reg.Online() {
 		if srv.Hidden {
 			continue
 		}
-		players += srv.Players
-		maxPlayers += srv.MaxPlayers
+		sum.players += srv.Players
+		sum.maxPlayers += srv.MaxPlayers
 		mark := "§7"
 		if srv.Accepts(protocol) {
 			mark = "§a"
-			compatible++
+			sum.compatible++
 		}
-		samples = append(samples, sample{
+		sum.samples = append(sum.samples, statusSample{
 			Name: fmt.Sprintf("%s%s §8(%s, %s)", mark, srv.Name, srv.Loader, srv.VersionName),
 			ID:   "00000000-0000-0000-0000-000000000000",
 		})
 	}
+	r.statusCache[protocol] = sum
+	return sum
+}
+
+func (r *Router) statusDoc(protocol int32, clientIP string) map[string]any {
+	sum := r.summary(protocol)
 	motd := r.cfg.MOTD
 	if motd == "" {
 		motd = "anymcp gateway"
 	}
-	return map[string]any{
-		"version": map[string]any{"name": "anymcp", "protocol": protocol},
-		"players": map[string]any{"online": players, "max": maxPlayers, "sample": samples},
-		"description": proto.Join(
-			proto.C(motd+"\n", "gold"),
-			proto.C(fmt.Sprintf("%d servers online, %d for %s", len(samples), compatible, proto.VersionName(protocol)), "gray"),
-		),
+	second := proto.C(fmt.Sprintf("%d servers online, %d for %s", len(sum.samples), sum.compatible, proto.VersionName(protocol)), "gray")
+	if line, ok := r.personalLine(clientIP); ok {
+		second = line
 	}
+	return map[string]any{
+		"version":     map[string]any{"name": "anymcp", "protocol": protocol},
+		"players":     map[string]any{"online": sum.players, "max": sum.maxPlayers, "sample": sum.samples},
+		"description": proto.Join(proto.C(motd+"\n", "gold"), second),
+	}
+}
+
+// personalLine describes where this client's next join goes.
+func (r *Router) personalLine(clientIP string) (proto.Text, bool) {
+	if !r.cfg.PersonalizedMOTD {
+		return proto.Text{}, false
+	}
+	player, ok := r.pending.IPPlayer(clientIP)
+	if !ok {
+		return proto.Text{}, false
+	}
+	if id, ok := r.pending.Get(player); ok {
+		if srv, ok := r.reg.Get(id); ok {
+			return proto.Join(proto.C("Next join: ", "gray"), proto.C(srv.Name, "green")), true
+		}
+	}
+	if r.cfg.StickyTTL > 0 {
+		if id, ok := r.pending.Sticky(player); ok {
+			if srv, ok := r.reg.Get(id); ok && srv.Online {
+				switch_ := ""
+				if r.cfg.Domain != "" {
+					switch_ = " · lobby." + r.cfg.Domain + " to switch"
+				}
+				return proto.Join(proto.C("Back to ", "gray"), proto.C(srv.Name, "green"), proto.C(switch_, "dark_gray")), true
+			}
+		}
+	}
+	return proto.Text{}, false
 }
 
 func (r *Router) handleLogin(s *session) {
@@ -253,12 +399,20 @@ func (r *Router) handleLogin(s *session) {
 	}
 	s.loginRaw = raw
 	s.log = s.log.With("player", s.login.Name)
+	if r.cfg.PersonalizedMOTD {
+		r.pending.SetIPPlayer(s.clientIP(), s.login.Name, 30*24*time.Hour)
+	}
 
 	host := s.hs.Host()
 
 	// 1. Returning from a transfer with a signed route cookie.
 	if s.hs.Intent == proto.IntentTransfer && s.hs.Protocol >= proto.Proto1_20_5 {
 		if id, err := r.readRouteCookie(s); err == nil {
+			if id == lobbyRoute {
+				s.forceMenu = true
+				r.lobby(s)
+				return
+			}
 			r.connect(s, id, "cookie")
 			return
 		} else if !errors.Is(err, errNoCookie) {
@@ -267,6 +421,7 @@ func (r *Router) handleLogin(s *session) {
 	}
 	// 2. Explicit lobby.
 	if r.isLobbyHost(host) {
+		s.forceMenu = true
 		r.lobby(s)
 		return
 	}
@@ -278,17 +433,61 @@ func (r *Router) handleLogin(s *session) {
 	// 4. Remembered choice (clients that reconnect instead of transferring).
 	if id, ok := r.pending.Get(s.login.Name); ok {
 		if srv, ok := r.reg.Get(id); ok && srv.Online && srv.Accepts(s.hs.Protocol) {
+			r.pending.Clear(s.login.Name)
 			r.connect(s, id, "pending")
 			return
 		}
 	}
-	// 5. Only one server could possibly take this client: skip the lobby.
-	cands := match.Rank(r.handshakeClient(s), r.visibleOnline())
-	if len(cands) == 1 && cands[0].Certain {
-		r.connect(s, cands[0].Server.ID, "only-candidate")
+	// 5. Back to the last server played, if it still fits.
+	if id, ok := r.stickyServer(s); ok {
+		r.connect(s, id, "sticky")
+		return
+	}
+	// 6. Only one online server accepts this version at all, and it surely
+	// fits: nothing to choose. Other servers on the same version might fit
+	// better once the lobby learns the loader and mods (the handshake alone
+	// cannot tell a NeoForge or Fabric client from vanilla), so they force
+	// the lobby.
+	if srv, ok := r.onlyServerFor(s); ok {
+		r.connect(s, srv.ID, "only-candidate")
 		return
 	}
 	r.lobby(s)
+}
+
+// stickyServer returns the player's last server when it is online, accepts
+// the client version and is not excluded by what the handshake reveals.
+func (r *Router) stickyServer(s *session) (string, bool) {
+	if r.cfg.StickyTTL <= 0 {
+		return "", false
+	}
+	id, ok := r.pending.Sticky(s.login.Name)
+	if !ok {
+		return "", false
+	}
+	srv, ok := r.reg.Get(id)
+	if !ok || !srv.Online || !srv.Accepts(s.hs.Protocol) || r.pending.Rejected(s.login.Name, id) {
+		return "", false
+	}
+	return id, len(match.Rank(r.handshakeClient(s), []registry.Server{srv})) == 1
+}
+
+// onlyServerFor returns the server when exactly one visible online server
+// accepts the client's protocol and is a certain match for the handshake.
+func (r *Router) onlyServerFor(s *session) (registry.Server, bool) {
+	var only registry.Server
+	accepting := 0
+	for _, srv := range r.visibleOnline() {
+		if srv.Accepts(s.hs.Protocol) {
+			accepting++
+			only = srv
+		}
+	}
+	if accepting != 1 {
+		return registry.Server{}, false
+	}
+	cands := match.Rank(r.handshakeClient(s), []registry.Server{only})
+	return only, len(cands) == 1 && cands[0].Certain
 }
 
 // handshakeClient derives what is known before the lobby probes further.
@@ -368,14 +567,42 @@ func (r *Router) connect(s *session, id, reason string) {
 		hs.Intent = proto.IntentLogin
 		hsRaw = hs.Frame()
 	}
+	if r.cfg.StickyTTL > 0 {
+		r.pending.SetSticky(s.login.Name, srv.ID, r.cfg.StickyTTL)
+	}
+	r.m.routes.Inc(reason, srv.ID)
 	s.log.Info("routing player", "server", srv.ID, "via", reason)
 	r.pipe(s, srv, hsRaw, s.loginRaw)
 }
 
+func (r *Router) dial(srv registry.Server) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if r.cfg.Dial != nil {
+		return r.cfg.Dial(ctx, srv)
+	}
+	var d net.Dialer
+	return d.DialContext(ctx, "tcp", srv.Address)
+}
+
 // pipe dials the backend, replays the given frames and copies bytes both ways.
 func (r *Router) pipe(s *session, srv registry.Server, replay ...[]byte) {
-	backend, err := net.DialTimeout("tcp", srv.Address, 5*time.Second)
+	var guardKey []byte
+	if srv.Guard {
+		if r.cfg.GuardKeys != nil {
+			guardKey = r.cfg.GuardKeys(srv)
+		}
+		if guardKey == nil {
+			s.log.Error("guarded server has no guard key", "server", srv.ID)
+			if s.hs.Intent != proto.IntentStatus {
+				s.send(proto.LoginDisconnect(proto.Join(proto.C(srv.Name, "yellow"), proto.C(" is misconfigured on the gateway.", "red"))))
+			}
+			return
+		}
+	}
+	backend, err := r.dial(srv)
 	if err != nil {
+		r.m.dialFailures.Inc(srv.ID)
 		s.log.Warn("backend dial failed", "server", srv.ID, "err", err)
 		if s.hs.Intent != proto.IntentStatus {
 			s.send(proto.LoginDisconnect(proto.Join(proto.C(srv.Name, "yellow"), proto.C(" is unreachable.", "red"))))
@@ -383,8 +610,15 @@ func (r *Router) pipe(s *session, srv registry.Server, replay ...[]byte) {
 		return
 	}
 	defer backend.Close()
-	if srv.ProxyProtocol {
-		if _, err := backend.Write(proxyV2Header(s.client, backend.RemoteAddr())); err != nil {
+	var preamble []byte
+	switch {
+	case srv.Guard:
+		preamble = guard.Header(guardKey, s.client, backend.RemoteAddr(), time.Now(), guard.NewNonce())
+	case srv.ProxyProtocol:
+		preamble = proxyV2Header(s.client, backend.RemoteAddr())
+	}
+	if len(preamble) > 0 {
+		if _, err := backend.Write(preamble); err != nil {
 			return
 		}
 	}

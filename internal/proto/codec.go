@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"unicode/utf8"
 )
 
@@ -171,7 +172,24 @@ func (p *Builder) Bool(v bool) *Builder {
 	return p
 }
 
+func (p *Builder) Byte(v byte) *Builder     { p.b = append(p.b, v); return p }
 func (p *Builder) Uint16(v uint16) *Builder { p.b = binary.BigEndian.AppendUint16(p.b, v); return p }
+func (p *Builder) Int16(v int16) *Builder   { return p.Uint16(uint16(v)) }
+
+func (p *Builder) Int32(v int32) *Builder {
+	p.b = binary.BigEndian.AppendUint32(p.b, uint32(v))
+	return p
+}
+
+func (p *Builder) Float32(v float32) *Builder {
+	p.b = binary.BigEndian.AppendUint32(p.b, math.Float32bits(v))
+	return p
+}
+
+func (p *Builder) Float64(v float64) *Builder {
+	p.b = binary.BigEndian.AppendUint64(p.b, math.Float64bits(v))
+	return p
+}
 func (p *Builder) Int64(v int64) *Builder {
 	p.b = binary.BigEndian.AppendUint64(p.b, uint64(v))
 	return p

@@ -51,14 +51,14 @@ func TestPingProxyProtocol(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	st, err := Ping(ctx, fakeStatusServer(t, true), -1, true)
+	st, err := Ping(ctx, fakeStatusServer(t, true), -1, ProxyV2Local(), nil)
 	if err != nil || st.Version.Protocol != 774 || st.Players.Online != 3 {
 		t.Fatalf("with PROXY header: %+v, %v", st, err)
 	}
-	if _, err := Ping(ctx, fakeStatusServer(t, true), -1, false); err == nil {
+	if _, err := Ping(ctx, fakeStatusServer(t, true), -1, nil, nil); err == nil {
 		t.Fatal("ping without PROXY header must fail against a PROXY-only server")
 	}
-	if _, err := Ping(ctx, fakeStatusServer(t, false), -1, false); err != nil {
+	if _, err := Ping(ctx, fakeStatusServer(t, false), -1, nil, nil); err != nil {
 		t.Fatalf("plain ping: %v", err)
 	}
 }
