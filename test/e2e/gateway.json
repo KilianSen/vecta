@@ -1,0 +1,36 @@
+{
+  "listen": ":25565",
+  "apiListen": ":8080",
+  "domain": "play.test",
+  "transferHost": "10.10.25.155",
+  "transferPort": 35565,
+  "cookieSecret": "e2e-cookie-secret",
+  "registrationTTL": "30s",
+  "healthInterval": "5s",
+  "probeWindow": "1500ms",
+  "motd": "anymcp e2e",
+  "owners": {
+    "owner-b": "tok-b",
+    "owner-d": "tok-d",
+    "owner-e": "tok-e"
+  },
+  "servers": [
+    {
+      "id": "paper-a",
+      "name": "Paper A 1.21.11",
+      "address": "mc-paper-a:25565",
+      "loader": "paper",
+      "minProtocol": 774,
+      "maxProtocol": 774,
+      "proxyProtocol": true
+    },
+    {
+      "id": "vanilla-old",
+      "name": "Vanilla 1.20.1",
+      "address": "mc-vanilla-old:25565",
+      "loader": "vanilla",
+      "minProtocol": 763,
+      "maxProtocol": 763
+    }
+  ]
+}

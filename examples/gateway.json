@@ -1,0 +1,30 @@
+{
+  "listen": ":25565",
+  "apiListen": ":8080",
+  "domain": "play.example.com",
+  "cookieSecret": "replace-with-a-long-random-string",
+  "acceptProxyProtocol": false,
+  "registrationTTL": "45s",
+  "healthInterval": "10s",
+  "autoMinScore": 50,
+  "autoMargin": 15,
+  "probeWindow": "1500ms",
+  "pendingTTL": "3m",
+  "forgeModQuery": false,
+  "motd": "Example network - join to pick a server",
+  "owners": {
+    "alice": "replace-with-alice-token",
+    "bob": "replace-with-bob-token"
+  },
+  "servers": [
+    {
+      "id": "survival",
+      "name": "Survival",
+      "description": "Vanilla survival with plugins",
+      "address": "10.0.0.20:25565",
+      "loader": "paper",
+      "minProtocol": 767,
+      "maxProtocol": 776
+    }
+  ]
+}

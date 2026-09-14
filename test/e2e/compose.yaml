@@ -1,0 +1,115 @@
+# End-to-end test stack: gateway + 5 real servers + 3 registration agents.
+#   docker compose -p anymcp-test -f test/e2e/compose.yaml up -d --build
+#   node test/e2e/clients.mjs
+#   docker compose -p anymcp-test -f test/e2e/compose.yaml down -v
+name: anymcp-test
+
+x-mc: &mc
+  image: itzg/minecraft-server:latest
+  restart: "no"
+  labels: [anymcp-test=true]
+  environment: &mcenv
+    EULA: "TRUE"
+    ONLINE_MODE: "FALSE"
+    ENFORCE_SECURE_PROFILE: "FALSE"
+    MEMORY: 1G
+    VIEW_DISTANCE: "4"
+    SPAWN_PROTECTION: "0"
+    LEVEL_TYPE: minecraft:flat
+
+x-anymcp: &anymcp
+  build: .
+  image: anymcp-test/anymcp:e2e
+  labels: [anymcp-test=true]
+  restart: on-failure
+
+services:
+  gateway:
+    <<: *anymcp
+    command: ["gateway", "-config", "/etc/anymcp/gateway.json", "-v"]
+    ports:
+      - "35565:25565"
+      - "38080:8080"
+
+  # A: Paper 1.21.11, static in gateway config
+  mc-paper-a:
+    <<: *mc
+    environment:
+      <<: *mcenv
+      TYPE: PAPER
+      VERSION: "1.21.11"
+      MOTD: Paper A
+
+  # B: Paper 1.21.4 + ViaVersion/ViaBackwards, registered by agent
+  mc-paper-via:
+    <<: *mc
+    environment:
+      <<: *mcenv
+      TYPE: PAPER
+      VERSION: "1.21.4"
+      MODRINTH_PROJECTS: "viaversion,viabackwards"
+      MOTD: Paper Via
+
+  # C: Vanilla 1.20.1, static in gateway config
+  mc-vanilla-old:
+    <<: *mc
+    environment:
+      <<: *mcenv
+      TYPE: VANILLA
+      VERSION: "1.20.1"
+      MOTD: Vanilla old
+
+  # D: Fabric 1.21.1 modpack, agent scans its mods
+  mc-fabric:
+    <<: *mc
+    environment:
+      <<: *mcenv
+      TYPE: FABRIC
+      VERSION: "1.21.1"
+      MEMORY: 1500M
+      MODRINTH_PROJECTS: "fabric-api,appleskin,lithium"
+      MOTD: Fabric pack
+    volumes:
+      - fabric-data:/data
+
+  # E: NeoForge 1.21.1 modpack, agent scans its mods
+  mc-neoforge:
+    <<: *mc
+    environment:
+      <<: *mcenv
+      TYPE: NEOFORGE
+      VERSION: "1.21.1"
+      MEMORY: 2G
+      MODRINTH_PROJECTS: "jei"
+      MOTD: NeoForge pack
+    volumes:
+      - neoforge-data:/data
+
+  agent-b:
+    <<: *anymcp
+    command: ["agent", "-config", "/etc/anymcp/agent-b.json"]
+    depends_on:
+      gateway: {condition: service_started}
+      mc-paper-via: {condition: service_healthy}
+
+  agent-d:
+    <<: *anymcp
+    command: ["agent", "-config", "/etc/anymcp/agent-d.json"]
+    volumes:
+      - fabric-data:/srv:ro
+    depends_on:
+      gateway: {condition: service_started}
+      mc-fabric: {condition: service_healthy}
+
+  agent-e:
+    <<: *anymcp
+    command: ["agent", "-config", "/etc/anymcp/agent-e.json"]
+    volumes:
+      - neoforge-data:/srv:ro
+    depends_on:
+      gateway: {condition: service_started}
+      mc-neoforge: {condition: service_healthy}
+
+volumes:
+  fabric-data:
+  neoforge-data:

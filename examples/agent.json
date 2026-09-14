@@ -1,0 +1,16 @@
+{
+  "gateway": "https://mc-api.example.com",
+  "token": "replace-with-alice-token",
+  "interval": "15s",
+  "modsDir": "/srv/minecraft/createpack/mods",
+  "server": {
+    "id": "createpack",
+    "name": "Create Pack",
+    "description": "Fabric 1.21.1 - Create + friends",
+    "address": "10.0.0.31:25565",
+    "loader": "fabric",
+    "minProtocol": 767,
+    "maxProtocol": 767,
+    "requiredClientMods": ["create"]
+  }
+}

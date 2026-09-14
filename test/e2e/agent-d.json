@@ -1,0 +1,15 @@
+{
+  "gateway": "http://gateway:8080",
+  "token": "tok-d",
+  "interval": "10s",
+  "modsDir": "/srv/mods",
+  "server": {
+    "id": "fabric-pack",
+    "name": "Fabric 1.21.1 pack",
+    "address": "mc-fabric:25565",
+    "loader": "fabric",
+    "minProtocol": 767,
+    "maxProtocol": 767,
+    "requiredClientMods": ["appleskin"]
+  }
+}

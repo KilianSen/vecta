@@ -1,0 +1,14 @@
+{
+  "gateway": "http://gateway:8080",
+  "token": "tok-e",
+  "interval": "10s",
+  "modsDir": "/srv/mods",
+  "server": {
+    "id": "neo-pack",
+    "name": "NeoForge 1.21.1 pack",
+    "address": "mc-neoforge:25565",
+    "loader": "neoforge",
+    "minProtocol": 767,
+    "maxProtocol": 767
+  }
+}
