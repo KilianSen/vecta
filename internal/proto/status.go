@@ -149,6 +149,13 @@ func decodeForgeOptimized(s string) ([]byte, error) {
 		return nil, fmt.Errorf("proto: forgeData d too short")
 	}
 	size := int(chars[0]) | int(chars[1])<<15
+	// Guard against a decompression bomb: the two header chars can declare a size
+	// up to ~1 GiB, but each remaining char yields at most 2 bytes, so a size
+	// larger than the input could ever produce is invalid — reject it before
+	// allocating, so a tiny crafted forgeData can't force a huge allocation.
+	if size < 0 || size > len(chars)*2 {
+		return nil, fmt.Errorf("proto: forgeData d declared size %d exceeds input", size)
+	}
 	out := make([]byte, 0, size)
 	var buf uint32
 	bits := 0
