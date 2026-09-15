@@ -38,7 +38,9 @@ public final class Launcher {
             jar = detectServerJar(cfg.serverDir);
         }
         if (jar == null) {
-            fail("no server jar found. Run java -jar vecta.jar <server.jar> [args], or set serverJar in " + cfg.file);
+            fail("no server jar found. Run java -jar vecta.jar <server.jar> [args], set serverJar in " + cfg.file
+                    + ", or — if the server is started by a script or launcher — add -javaagent:vecta.jar to that "
+                    + "server's JVM instead of wrapping it.");
         }
         if (!jar.isAbsolute()) jar = new File(cfg.serverDir, jar.getPath());
         if (!jar.isFile()) fail("server jar " + jar + " does not exist");

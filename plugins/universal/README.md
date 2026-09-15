@@ -18,8 +18,15 @@ Put `vecta.jar` in the server directory and pick one way to start it:
 
 | Mode | Start command | Use when |
 |---|---|---|
-| Wrapper | `java -jar vecta.jar [server.jar] [server args]` | The server starts from a single jar (vanilla, Paper, Fabric launcher, Forge ≤1.16, Forge/NeoForge server shims). Without `server.jar`, the jar is detected (or set `serverJar`). |
-| Java agent | `java -javaagent:vecta.jar -jar server.jar` | The server starts from a script, e.g. Forge/NeoForge `run.sh`: add `-javaagent:vecta.jar` to `user_jvm_args.txt`. |
+| Java agent (recommended) | `java -javaagent:vecta.jar -jar server.jar` | Always works: it attaches to the JVM that runs the server. For script-started servers (Forge/NeoForge `run.sh`) add `-javaagent:vecta.jar` to `user_jvm_args.txt`. |
+| Wrapper | `java -jar vecta.jar [server.jar] [server args]` | Convenience for a server that starts from a single jar **in the same JVM** (vanilla, Paper/Paperclip, the Fabric server-launch jar). Without `server.jar`, one is auto-detected (or set `serverJar`). |
+
+**Agent mode is the robust default.** In wrapper mode, if the jar you launch is
+a *launcher* that starts the server in a **separate process** (rather than in
+this JVM), Vecta can't hook it: registration and the guard still work, but
+`/hub`, `/server`, `/global` and live mod detection don't — Vecta detects this
+(the server answers a local ping but never appears in this JVM) and logs a
+warning telling you to use `-javaagent:vecta.jar` on the server's own JVM.
 
 On the first start it creates `vecta.properties`. Fill in `gateway`, `token`,
 `serverId` and `address`, then restart. Every key can also come from an
