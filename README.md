@@ -475,3 +475,11 @@ Options come from the environment:
 **Known limitation:** the 1.16.5 client stalls during startup under HeadlessMC,
 even under Xvfb, and never connects. Its scenario is disabled; the 1.16.5 limbo
 is covered by the bot suite.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). The generated
+protocol tables are derived from [minecraft-data](https://github.com/PrismarineJS/minecraft-data)
+(MIT); the NOTICE file carries the attribution.
+
+Vecta is not affiliated with Mojang or Microsoft.
