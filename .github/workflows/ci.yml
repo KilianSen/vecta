@@ -30,7 +30,10 @@ jobs:
       - name: generated tables are up to date
         run: |
           python3 tools/limbogen/gen.py /tmp/minecraft-data
-          git diff --exit-code internal/limbo plugins/universal/src/main/resources/packets.json
+          # Check the deterministic text outputs. The .nbt.gz blobs are excluded
+          # because gzip output is not byte-reproducible across platforms/zlib
+          # versions; the limbo tests decode and validate every one of them.
+          git diff --exit-code internal/limbo/zz_packets_gen.go plugins/universal/src/main/resources/packets.json
 
   jar:
     # The vecta server jar: Java 8 bytecode, self-test, uploaded as an artifact.
