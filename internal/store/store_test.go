@@ -72,7 +72,11 @@ func TestFailedFlushStaysDirty(t *testing.T) {
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "file")
 	os.WriteFile(blocker, []byte("x"), 0o600)
-	s, _ := Open(filepath.Join(blocker, "state.json")) // parent is a file: writes fail
+	s, err := Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.path = filepath.Join(blocker, "state.json") // parent is a file: writes fail
 	s.Set("sticky", "a", "b", 0)
 	if err := s.Flush(); err == nil {
 		t.Fatal("flush into a file path succeeded")
