@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://logo.kiliansen.de/vecta/dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="https://logo.kiliansen.de/vecta/light.svg">
-    <img alt="VectaMine" src="https://logo.kiliansen.de/vecta/light.svg" height="88">
+    <img alt="VectaMine" src="https://logo.kiliansen.de/vecta/light.svg" height="300">
   </picture>
 </div>
 
