@@ -1,7 +1,13 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://logo.kiliansen.de/vecta/small_dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://logo.kiliansen.de/vecta/small_light.svg">
+  <img alt="Vecta" src="https://logo.kiliansen.de/vecta/small_light.svg" height="40">
+</picture>
+
 # VectaMine — server jar
 
 One jar for any Java Minecraft server (vanilla, Paper/Spigot, Fabric/Quilt,
-Forge, NeoForge; Java 8 and newer). It registers the server at an vecta
+Forge, NeoForge; Java 8 and newer). It registers the server at a Vecta
 gateway and can guard it so players can only join through the gateway. No
 dependencies and nothing compiled against a platform, so the same jar works
 across loaders and versions.

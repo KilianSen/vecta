@@ -231,7 +231,7 @@ final class Config {
 
     private static void writeTemplate(File f) {
         String template = ""
-                + "# vecta: registers this server at an vecta gateway and can guard it.\n"
+                + "# vecta: registers this server at a Vecta gateway and can guard it.\n"
                 + "# Every key can also be set as an environment variable, e.g. VECTA_TOKEN or VECTA_SERVER_ID.\n"
                 + "\n"
                 + "# Gateway API base URL and the owner token from the gateway admin.\n"

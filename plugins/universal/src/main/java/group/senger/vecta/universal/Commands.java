@@ -32,6 +32,7 @@ final class Commands {
     private final ConcurrentHashMap<Object, Conn> live = new ConcurrentHashMap<Object, Conn>();
     private final java.util.concurrent.atomic.AtomicInteger childCounter = new java.util.concurrent.atomic.AtomicInteger();
     private volatile long globalSeq;
+    private volatile int serverProtocol = -1;
 
     private Commands(Config cfg, NettyRef ref) {
         this.cfg = cfg;
@@ -66,6 +67,7 @@ final class Commands {
         try {
             NettyRef ref = new NettyRef(servers.get(0).getClass().getClassLoader());
             Commands c = new Commands(cfg, ref);
+            c.detectServerProtocol();
             int wired = 0;
             for (Object server : servers) {
                 if (c.install(server)) wired++;
@@ -81,6 +83,31 @@ final class Commands {
             Log.warn("commands: setup failed", t);
             return null;
         }
+    }
+
+    /**
+     * The server's own protocol — what our handler sees on the wire, since it sits after any
+     * ViaVersion decoder. Packets are parsed and built with this; the client's handshake protocol
+     * (which differs for Via clients) is used only for the transfer-ticket decision.
+     */
+    private void detectServerProtocol() {
+        for (int i = 0; i < 5 && serverProtocol <= 0; i++) {
+            try {
+                int p = StatusPing.ping(cfg.localAddress(), cfg.proxyProtocol, 3000).protocol;
+                if (p > 0) {
+                    serverProtocol = p;
+                    Log.debug("commands: server wire protocol " + p);
+                    return;
+                }
+            } catch (Exception e) {
+                Log.debug("commands: server protocol ping failed: " + e);
+            }
+            sleep(1000);
+        }
+    }
+
+    private int wireFor(int clientProtocol) {
+        return serverProtocol > 0 ? serverProtocol : clientProtocol;
     }
 
     /** Replaces the server bootstrap's child handler so every new connection gets our sniffer. */
@@ -188,8 +215,8 @@ final class Commands {
             final Object channel = ref.ctxChannel(ctx);
             final int proto = protocol;
             final String pl = player;
-            if (!Packets.known(proto)) {
-                Log.debug("commands: unknown protocol " + proto + " for " + player + "; not attaching");
+            if (!Packets.known(wireFor(proto))) {
+                Log.debug("commands: unknown wire protocol for " + player + " (client " + proto + "); not attaching");
             } else {
                 // Attach after login so compression negotiation is done: the decompressor is then
                 // already before "decoder", and our handler (added before "decoder") sits after it.
@@ -227,10 +254,11 @@ final class Commands {
                 Log.debug("commands: no decoder for " + player + "; not attaching");
                 return;
             }
-            Interceptor h = new Interceptor(channel, protocol, player);
+            int wire = wireFor(protocol);
+            Interceptor h = new Interceptor(channel, protocol, wire, player);
             ref.addBefore(pipeline, "decoder", "vecta-cmd", ref.newHandler(h));
-            live.put(channel, new Conn(channel, protocol, player));
-            Log.debug("commands: attached to " + player + " (protocol " + protocol + ")");
+            live.put(channel, new Conn(channel, wire, player));
+            Log.debug("commands: attached to " + player + " (client " + protocol + ", wire " + wire + ")");
         } catch (Throwable t) {
             Log.debug("commands: attach failed for " + player + ": " + t);
         }
@@ -239,15 +267,17 @@ final class Commands {
     /** In PLAY, catches our commands and consumes them; forwards everything else untouched. */
     private final class Interceptor implements NettyRef.Inbound {
         private final Object channel;
-        private final int protocol;
+        private final int clientProtocol; // from the handshake; for the transfer ticket
+        private final int wire;           // server-native; what's on the wire at our pipeline position
         private final String player;
         private final Packets.Ids ids;
 
-        Interceptor(Object channel, int protocol, String player) {
+        Interceptor(Object channel, int clientProtocol, int wire, String player) {
             this.channel = channel;
-            this.protocol = protocol;
+            this.clientProtocol = clientProtocol;
+            this.wire = wire;
             this.player = player;
-            this.ids = Packets.forProtocol(protocol);
+            this.ids = Packets.forProtocol(wire);
         }
 
         @Override
@@ -311,7 +341,7 @@ final class Commands {
         private void transfer(String target) throws Exception {
             Map<String, Object> tk;
             try {
-                tk = gateway.ticket(cfg.serverId, player, protocol, target);
+                tk = gateway.ticket(cfg.serverId, player, clientProtocol, target);
             } catch (Exception e) {
                 say("Could not move you: " + shortMessage(e), "red");
                 return;
@@ -328,7 +358,7 @@ final class Commands {
                     say("Your client version can't be transferred.", "red");
                 }
             } else { // reconnect
-                byte[] dc = Chat.disconnect(ids, protocol, Json.str(tk.get("message")), null);
+                byte[] dc = Chat.disconnect(ids, wire, Json.str(tk.get("message")), null);
                 if (dc != null) {
                     ref.sendRaw(channel, dc);
                     ref.close(channel);
@@ -353,7 +383,7 @@ final class Commands {
         }
 
         private void say(String text, String color) {
-            byte[] p = Chat.systemChat(ids, protocol, text, color);
+            byte[] p = Chat.systemChat(ids, wire, text, color);
             if (p != null) ref.sendRaw(channel, p);
         }
 

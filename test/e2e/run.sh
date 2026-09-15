@@ -55,12 +55,15 @@ wait_online() {
   done
   echo "timed out waiting for $EXPECT_SERVERS servers"; return 1
 }
+# Tune first: paper-a has proxyProtocol enabled, so the gateway sends it a PROXY
+# header even on health pings, and it stays offline until tune-paper.sh turns on
+# proxy-protocol. tune-paper.sh waits for each server's config files, so it can
+# run before the online gate; on a cold stack this avoids a deadlock (servers
+# never reach "online" before tuning, which used to run only after).
+step "tune paper servers"
+$SSH "sh $REMOTE/tune-paper.sh" 2>&1 | tee "$RESULTS/tune.log"
 step "wait for servers"
 wait_online
-step "tune paper servers"
-if $SSH "sh $REMOTE/tune-paper.sh" | tee "$RESULTS/tune.log" | grep -q restarted; then
-  wait_online
-fi
 
 step "protocol-bot suite"
 (cd "$E2E" && [ -d node_modules ] || npm ci --silent)

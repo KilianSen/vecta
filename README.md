@@ -1,4 +1,10 @@
-# VectaMine
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://logo.kiliansen.de/vecta/dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://logo.kiliansen.de/vecta/light.svg">
+    <img alt="VectaMine" src="https://logo.kiliansen.de/vecta/light.svg" height="88">
+  </picture>
+</div>
 
 One public address for many independent Minecraft Java servers: any version,
 vanilla, plugin or modded. Players connect to `play.example.com` and get
