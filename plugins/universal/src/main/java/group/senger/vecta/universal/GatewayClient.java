@@ -20,8 +20,9 @@ final class GatewayClient {
         this.token = token;
     }
 
-    void register(String id, String json) throws IOException {
-        request("PUT", serverUrl(id), json, 10000);
+    /** Registers or refreshes the server; returns the saved registration as JSON. */
+    String register(String id, String json) throws IOException {
+        return request("PUT", serverUrl(id), json, 10000);
     }
 
     void unregister(String id) throws IOException {

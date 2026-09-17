@@ -24,6 +24,7 @@ COPY --from=build --chown=65532:65532 /out/data /data
 # The default dataFile (vecta-state.json) lands in the /data volume.
 WORKDIR /data
 VOLUME /data
+# Side ports use the range configured in gateway.json (e.g. 24500-24599, tcp+udp).
 EXPOSE 25565 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD ["/usr/local/bin/vecta", "healthcheck"]

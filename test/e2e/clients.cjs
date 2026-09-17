@@ -487,6 +487,35 @@ async function main () {
     return describe(r)
   })
 
+  await scenario('S14 side ports: static echo backend over UDP and TCP; jar hook reports its assignment', async () => {
+    // Static servers are synced at startup, so "echo" holds the first port of each pool.
+    const udpReply = await new Promise((resolve) => {
+      const sock = require('dgram').createSocket('udp4')
+      let tries = 0
+      const timer = setInterval(() => {
+        if (++tries > 20) { clearInterval(timer); sock.close(); resolve('') }
+        sock.send('ping-udp', 34500, GW_HOST)
+      }, 250)
+      sock.on('message', (m) => { clearInterval(timer); sock.close(); resolve(m.toString()) })
+    })
+    expect(udpReply === 'ping-udp', `udp echo: ${JSON.stringify(udpReply)}`)
+    const tcpReply = await new Promise((resolve) => {
+      const s = net.connect(34500, GW_HOST, () => s.end('ping-tcp'))
+      let data = ''
+      s.setTimeout(5000, () => s.destroy())
+      s.on('data', (d) => { data += d })
+      s.on('close', () => resolve(data))
+      s.on('error', () => resolve(data))
+    })
+    expect(tcpReply === 'ping-tcp', `tcp echo: ${JSON.stringify(tcpReply)}`)
+    let hookLine = ''
+    await waitFor('fabric-pack side port hook', async () => {
+      try { hookLine = docker(`exec ${container('mc-fabric')} cat /data/sideports.txt`) } catch { hookLine = '' }
+      return /^voice \(udp 24454\): assigned at 10\.10\.25\.155:345\d\d/m.test(hookLine)
+    }, 60000)
+    return `udp+tcp echoed; hook: ${hookLine.trim()}`
+  })
+
   const failed = results.filter((r) => !r.ok)
   console.log(`\n${results.length - failed.length}/${results.length} scenarios passed`)
   console.log('RESULTS_JSON ' + JSON.stringify(results))

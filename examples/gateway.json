@@ -26,6 +26,16 @@
   "allowLoopbackBackends": false,
   "metricsToken": "replace-with-a-scrape-token",
 
+  "sidePorts": {
+    "range": "24500-24599",
+    "listen": "",
+    "publicHost": "voice.example.com",
+    "udpIdleTimeout": "2m",
+    "releaseGrace": "2m",
+    "maxUdpFlows": 4096,
+    "maxFlowsPerPort": 512
+  },
+
   "owners": {
     "alice": "replace-with-alice-token",
     "bob": {

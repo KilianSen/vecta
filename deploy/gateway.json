@@ -20,6 +20,11 @@
   "maxLobbySessions": 500,
   "metricsToken": "${VECTA_METRICS_TOKEN}",
 
+  "sidePorts": {
+    "range": "${VECTA_SIDEPORT_RANGE:-}",
+    "publicHost": "${VECTA_SIDEPORT_HOST:-}"
+  },
+
   "owners": {
     "admin": "${VECTA_OWNER_TOKEN}"
   },

@@ -28,6 +28,11 @@ type Config struct {
 	Interval time.Duration
 	ModsDir  string // optional: scan jars here and add their mod IDs
 	Server   registry.Server
+	// SidePortHook is run (argv, no shell) when a side port assignment
+	// changes; see docs/side-ports.md.
+	SidePortHook []string
+	// StateFile remembers applied side port assignments across restarts.
+	StateFile string
 }
 
 func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
@@ -47,25 +52,39 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 		log.Info("scanned mods", "dir", cfg.ModsDir, "count", len(mods))
 	}
 
+	hk := newHooks(cfg.SidePortHook, cfg.StateFile, srv.ID, log)
+	declared := srv.SidePorts
+
 	url := strings.TrimRight(cfg.Gateway, "/") + "/api/v1/servers/" + srv.ID
 	client := &http.Client{Timeout: 10 * time.Second}
 	t := time.NewTicker(cfg.Interval)
 	defer t.Stop()
 	registered := false
 	for {
+		srv.SidePorts = append([]registry.SidePort(nil), declared...)
+		hk.prefer(srv.SidePorts)
 		body, _ := json.Marshal(srv)
-		if err := call(ctx, client, http.MethodPut, url, cfg.Token, body); err != nil {
+		resp, err := call(ctx, client, http.MethodPut, url, cfg.Token, body)
+		if err != nil {
 			log.Warn("registration failed", "err", err)
 			registered = false
-		} else if !registered {
-			log.Info("registered at gateway", "server", srv.ID, "gateway", cfg.Gateway)
-			registered = true
+		} else {
+			if !registered {
+				log.Info("registered at gateway", "server", srv.ID, "gateway", cfg.Gateway)
+				registered = true
+			}
+			var saved registry.Server
+			if err := json.Unmarshal(resp, &saved); err != nil {
+				log.Warn("unreadable registration response", "err", err)
+			} else if len(declared) > 0 || len(hk.applied) > 0 {
+				hk.apply(ctx, declared, saved.SidePorts)
+			}
 		}
 		select {
 		case <-ctx.Done():
 			dctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := call(dctx, client, http.MethodDelete, url, cfg.Token, nil); err != nil {
+			if _, err := call(dctx, client, http.MethodDelete, url, cfg.Token, nil); err != nil {
 				log.Warn("unregister failed", "err", err)
 			} else {
 				log.Info("unregistered", "server", srv.ID)
@@ -76,23 +95,23 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	}
 }
 
-func call(ctx context.Context, c *http.Client, method, url, token string, body []byte) error {
+func call(ctx context.Context, c *http.Client, method, url, token string, body []byte) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("%s %s: %s %s", method, url, resp.Status, strings.TrimSpace(string(msg)))
+		return nil, fmt.Errorf("%s %s: %s %s", method, url, resp.Status, strings.TrimSpace(string(msg)))
 	}
-	return nil
+	return io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 }
 
 func mergeUnique(a, b []string) []string {

@@ -13,6 +13,10 @@
   "dataFile": "/tmp/vecta-state.json",
   "metricsToken": "e2e-metrics",
   "motd": "vecta e2e",
+  "sidePorts": {
+    "range": "34500-34509",
+    "publicHost": "10.10.25.155"
+  },
   "owners": {
     "owner-b": "tok-b",
     "owner-d": "tok-d",
@@ -38,6 +42,16 @@
       "loader": "vanilla",
       "minProtocol": 763,
       "maxProtocol": 763
+    },
+    {
+      "id": "echo",
+      "name": "Side port echo",
+      "address": "echo:25565",
+      "hidden": true,
+      "sidePorts": [
+        {"name": "udp-echo", "protocol": "udp", "port": 7000},
+        {"name": "tcp-echo", "protocol": "tcp", "port": 7001}
+      ]
     }
   ]
 }

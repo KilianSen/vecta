@@ -3,6 +3,8 @@
   "token": "${VECTA_TOKEN}",
   "interval": "15s",
   "modsDir": "/srv/mods",
+  "sidePortHook": ["/srv/hooks/simple-voice-chat.sh"],
+  "stateFile": "/srv/vecta-sideports.json",
   "server": {
     "id": "survival",
     "name": "Survival",
@@ -11,6 +13,9 @@
     "loader": "fabric",
     "minProtocol": 767,
     "maxProtocol": 767,
-    "requiredClientMods": []
+    "requiredClientMods": [],
+    "sidePorts": [
+      {"name": "voice", "protocol": "udp", "port": 24454}
+    ]
   }
 }

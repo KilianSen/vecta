@@ -226,6 +226,7 @@ rejected at startup.
 | `allowLoopbackBackends` | false | Allow 127.0.0.0/8 and ::1 backends (single-host setups). |
 | `metricsToken` | none (open) | Bearer token required for `GET /metrics`. |
 | `owners` | none | `name → token`, or `name → {"token": ..., "allowedNetworks": [...]}`. An owner-level list replaces the global one. |
+| `sidePorts` | disabled | Public port pool for mods with their own port (voice chat, maps, votes): `{"range": "24500-24599", "publicHost": "voice.example.com"}`. See [docs/side-ports.md](docs/side-ports.md). |
 | `servers` | none | Static servers, same fields as a registration (see [docs/owner-api.md](docs/owner-api.md)). Trusted and dialed without the address policy. A static server may set `guard: true` with a `guardSecret` that matches the jar's `token`. |
 
 ## For server owners
@@ -259,6 +260,11 @@ server:
      connections carrying the gateway's signed PROXY header
      ([docs/guard-protocol.md](docs/guard-protocol.md)). Players who try the
      backend address directly are told to use the gateway.
+   - **Side ports** (`sidePorts=voice:udp:24454`): the gateway assigns a
+     public port for a mod's own port (Simple Voice Chat, Plasmo Voice, Geyser,
+     web maps, Votifier) and forwards it. `sidePortHook` runs a script with the
+     assigned address, e.g. to set `voice_host`
+     ([docs/side-ports.md](docs/side-ports.md)).
 
 2. **The sidecar agent** next to any server:
 
@@ -273,6 +279,7 @@ server:
      `quilt.mod.json`, `mods.toml`, `neoforge.mods.toml` and `mcmod.info` in each
      jar.
    - **Required mods:** list mods players must have in `requiredClientMods`.
+   - **Side ports:** `server.sidePorts` and `sidePortHook`, as for the jar.
 
 3. **The API directly:**
 
@@ -319,6 +326,10 @@ The gateway is the only public entry point:
 - `vecta_backend_dial_failures_total{server}`
 - `vecta_transfer_tickets_total{mode}`
 - `vecta_lobby_sessions_active`, `vecta_servers_registered`, `vecta_servers_online`
+- `vecta_sideport_assigned`, `vecta_sideport_flows`,
+  `vecta_sideport_connections_total{protocol}`,
+  `vecta_sideport_bytes_total{protocol,direction}`,
+  `vecta_sideport_dropped_total{reason}`
 
 **Fuzzing:** every network parser has a Go fuzz target, and CI runs each briefly
 on every push. Covered:

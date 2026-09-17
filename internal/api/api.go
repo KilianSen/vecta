@@ -35,6 +35,13 @@ type TicketIssuer interface {
 	IssueTicket(player string, protocol int32, target string) (router.Ticket, error)
 }
 
+// SidePorts assigns public ports to side ports (implemented by
+// *sideport.Manager).
+type SidePorts interface {
+	Sync(registry.Server) []registry.SidePort
+	Release(serverID string)
+}
+
 type Options struct {
 	Registry *registry.Registry
 	Owners   map[string]Owner
@@ -44,6 +51,7 @@ type Options struct {
 	// server can be health-checked immediately.
 	OnRegister func(registry.Server)
 	Tickets    TicketIssuer
+	SidePorts  SidePorts
 	Metrics    *metrics.Registry
 	// MetricsToken, if set, is required as bearer token for /metrics.
 	MetricsToken string
@@ -163,6 +171,9 @@ func (a *api) register(w http.ResponseWriter, r *http.Request) {
 			a.OnRegister(saved)
 		}
 	}
+	if a.SidePorts != nil {
+		saved.SidePorts = a.SidePorts.Sync(saved)
+	}
 	writeJSON(w, http.StatusOK, saved)
 }
 
@@ -179,6 +190,9 @@ func (a *api) unregister(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusForbidden, err.Error())
 	default:
+		if a.SidePorts != nil {
+			a.SidePorts.Release(id)
+		}
 		a.Log.Info("server unregistered", "server", id, "owner", name)
 		w.WriteHeader(http.StatusNoContent)
 	}

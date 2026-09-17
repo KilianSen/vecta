@@ -157,3 +157,66 @@ func TestMetricsToken(t *testing.T) {
 		t.Fatalf("metrics: %d %s", code, body)
 	}
 }
+
+type fakeSidePorts struct {
+	synced   []string
+	released []string
+}
+
+func (f *fakeSidePorts) Sync(s registry.Server) []registry.SidePort {
+	f.synced = append(f.synced, s.ID)
+	out := append([]registry.SidePort(nil), s.SidePorts...)
+	for i := range out {
+		out[i].Public = &registry.PublicAddr{Host: "voice.test", Port: 24500 + i}
+	}
+	return out
+}
+
+func (f *fakeSidePorts) Release(id string) { f.released = append(f.released, id) }
+
+func TestRegisterSidePorts(t *testing.T) {
+	reg := registry.New()
+	sp := &fakeSidePorts{}
+	srv := httptest.NewServer(New(Options{
+		Registry:  reg,
+		Owners:    map[string]Owner{"alice": {Token: "tok-a"}},
+		TTL:       time.Minute,
+		SidePorts: sp,
+		Log:       slog.New(slog.DiscardHandler),
+	}))
+	t.Cleanup(srv.Close)
+	url := srv.URL + "/api/v1/servers/voice"
+
+	// Gateway-set fields in the request are ignored.
+	code, body := do(t, "PUT", url, "tok-a", `{"address":"10.0.0.5:25565","sidePorts":[
+		{"name":"Voice","protocol":"UDP","port":24454,"public":{"host":"evil","port":1},"error":"x"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("register: %d %s", code, body)
+	}
+	var got registry.Server
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	p := got.SidePorts[0]
+	if p.Name != "voice" || p.Protocol != "udp" || p.Error != "" || p.Public == nil || p.Public.Host != "voice.test" {
+		t.Fatalf("side port = %+v", p)
+	}
+
+	for _, bad := range []string{
+		`[{"name":"v","protocol":"sctp","port":1}]`,
+		`[{"name":"v","protocol":"udp","port":0}]`,
+		`[{"name":"bad name","protocol":"udp","port":1}]`,
+		`[{"name":"v","protocol":"udp","port":1},{"name":"v","protocol":"tcp","port":2}]`,
+	} {
+		if code, body := do(t, "PUT", url, "tok-a", `{"address":"10.0.0.5:25565","sidePorts":`+bad+`}`); code != http.StatusBadRequest {
+			t.Errorf("%s: got %d %s", bad, code, body)
+		}
+	}
+
+	if code, _ := do(t, "DELETE", url, "tok-a", ""); code != http.StatusNoContent {
+		t.Fatalf("delete: %d", code)
+	}
+	if len(sp.released) != 1 || sp.released[0] != "voice" {
+		t.Fatalf("released = %v", sp.released)
+	}
+}

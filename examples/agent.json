@@ -3,6 +3,7 @@
   "token": "replace-with-alice-token",
   "interval": "15s",
   "modsDir": "/srv/minecraft/createpack/mods",
+  "sidePortHook": ["/srv/minecraft/createpack/hooks/simple-voice-chat.sh"],
   "server": {
     "id": "createpack",
     "name": "Create Pack",
@@ -11,6 +12,10 @@
     "loader": "fabric",
     "minProtocol": 767,
     "maxProtocol": 767,
-    "requiredClientMods": ["create"]
+    "requiredClientMods": ["create"],
+    "sidePorts": [
+      {"name": "voice", "protocol": "udp", "port": 24454},
+      {"name": "map", "protocol": "tcp", "port": 8100}
+    ]
   }
 }

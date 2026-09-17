@@ -38,6 +38,7 @@ public final class SelfTest {
         run("mod scan and client mod selection", SelfTest::scan);
         run("runtime data overrides the file scan", SelfTest::runtimeMerge);
         run("config parsing", SelfTest::config);
+        run("side port declarations and hooks", SelfTest::sidePorts);
         run("status ping", SelfTest::statusPing);
         run("guard proxy end to end", SelfTest::guardProxy);
         if (failures > 0) {
@@ -305,6 +306,82 @@ public final class SelfTest {
         check("pack".equals(a.get("serverId")) && "true".equals(a.get("guard")), "args");
         check("/x/vecta.properties".equals(Config.parseArgs("/x/vecta.properties").get("config")), "config path arg");
         check(HostPort.parse("[::1]:25566", 1).port == 25566 && HostPort.parse("host", 25565).port == 25565, "hostport");
+    }
+
+    private static void sidePorts() throws Exception {
+        List<SidePorts.Decl> d = SidePorts.parse(" Voice:UDP:24454 , map:tcp:8100,");
+        check(d.size() == 2 && d.get(0).name.equals("voice") && d.get(0).protocol.equals("udp") && d.get(0).port == 24454, "parse");
+        for (String bad : new String[] {"voice:udp", "voice:sctp:1", "voice:udp:0", "bad name:udp:1", "a:udp:1,a:tcp:2"}) {
+            try {
+                SidePorts.parse(bad);
+                check(false, "accepted " + bad);
+            } catch (IllegalArgumentException expected) {
+            }
+        }
+        check(SidePorts.splitHook("  ./hooks/voice.sh  --flag ").equals(java.util.Arrays.asList("./hooks/voice.sh", "--flag")), "hook split");
+
+        File dir = new File(System.getProperty("java.io.tmpdir"), "vecta-sideports-" + System.nanoTime());
+        check(dir.mkdirs(), "temp dir");
+        File state = new File(dir, SidePorts.STATE_FILE);
+        String answer = "{\"id\":\"s\",\"sidePorts\":[{\"name\":\"voice\",\"protocol\":\"udp\",\"port\":24454,"
+                + "\"public\":{\"host\":\"play.test\",\"port\":24500}}]}";
+
+        // Without a hook every state counts as applied and is remembered.
+        SidePorts sp = new SidePorts(SidePorts.parse("voice:udp:24454"), SidePorts.splitHook(""), state, dir, "s");
+        check(sp.report().get(0).get("preferredPort") == null, "no preference yet");
+        sp.apply(answer, false);
+        check(state.isFile(), "state saved");
+        SidePorts reloaded = new SidePorts(SidePorts.parse("voice:udp:24454"), SidePorts.splitHook(""), state, dir, "s");
+        check(Integer.valueOf(24500).equals(reloaded.report().get(0).get("preferredPort")), "preference from state " + reloaded.report());
+
+        Map<String, String> env = sp.env("voice", sp.applied.get("voice"), true);
+        check("24500".equals(env.get("VECTA_SIDEPORT_PORT")) && "play.test".equals(env.get("VECTA_SIDEPORT_HOST"))
+                && "assigned".equals(env.get("VECTA_SIDEPORT_STATE")) && "1".equals(env.get("VECTA_SERVER_STARTED"))
+                && "24454".equals(env.get("VECTA_SIDEPORT_BACKEND_PORT")) && "s".equals(env.get("VECTA_SERVER_ID")), "env " + env);
+
+        // An old gateway answers without sidePorts.
+        reloaded.apply("{\"id\":\"s\"}", true);
+        check("error".equals(reloaded.applied.get("voice").state)
+                && reloaded.applied.get("voice").error.contains("does not support"), "unsupported gateway");
+
+        if (File.separatorChar == '/') {
+            // A real hook: records its environment, fails once, then succeeds.
+            File log = new File(dir, "hook.log");
+            File script = new File(dir, "hook.sh");
+            write(script, "#!/bin/sh\necho \"$VECTA_SIDEPORT_STATE $VECTA_SIDEPORT_NAME $VECTA_SIDEPORT_PORT $VECTA_SERVER_STARTED\" >> hook.log\n"
+                    + "[ -f fail ] && rm fail && exit 1\nexit 0\n");
+            check(script.setExecutable(true), "chmod");
+            new File(dir, "fail").createNewFile();
+            File state2 = new File(dir, "state2.json");
+            SidePorts h = new SidePorts(SidePorts.parse("voice:udp:24454"), SidePorts.splitHook("./hook.sh"), state2, dir, "s");
+            h.apply(answer, false); // fails
+            h.apply(answer, false); // retried
+            h.apply(answer, true);  // unchanged: no run
+            h = new SidePorts(SidePorts.parse(""), SidePorts.splitHook("./hook.sh"), state2, dir, "s");
+            check(h.active(), "active while releases are pending");
+            h.apply("{\"id\":\"s\"}", true); // voice removed from the config: released
+            String lines = new String(readFile(log), StandardCharsets.UTF_8);
+            check(lines.equals("assigned voice 24500 0\nassigned voice 24500 0\nreleased voice  1\n"), "hook runs:\n" + lines);
+            check(h.applied.isEmpty() && !h.active(), "released state cleared");
+        }
+    }
+
+    private static void write(File f, String text) throws IOException {
+        OutputStream out = new FileOutputStream(f);
+        try {
+            out.write(text.getBytes(StandardCharsets.UTF_8));
+        } finally {
+            out.close();
+        }
+    }
+
+    private static byte[] readFile(File f) throws IOException {
+        InputStream in = new java.io.FileInputStream(f);
+        try {
+            return ModScanner.readAll(in, 1 << 20);
+        } finally {
+            in.close();
+        }
     }
 
     private static void statusPing() throws Exception {

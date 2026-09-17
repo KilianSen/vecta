@@ -27,7 +27,7 @@ final class Config {
             "gateway", "token", "serverId", "name", "description", "address", "hidden", "heartbeatSeconds",
             "loader", "protocols", "requiredClientMods", "proxyProtocol",
             "guard", "guardListen", "guardBackend", "guardJoinHint",
-            "commands", "runtimeChecks", "serverJar", "debug");
+            "sidePorts", "sidePortHook", "commands", "runtimeChecks", "serverJar", "debug");
 
     File serverDir = new File(System.getProperty("user.dir"));
     File file = new File(serverDir, FILE_NAME);
@@ -48,6 +48,8 @@ final class Config {
     String guardListen = "";
     String guardBackend = "";
     String guardJoinHint = "";
+    String sidePorts = "";
+    String sidePortHook = "";
     boolean commands = true;
     boolean runtimeChecks = true;
     String serverJar = "";
@@ -116,6 +118,10 @@ final class Config {
         else if (key.equals("guardListen")) guardListen = v;
         else if (key.equals("guardBackend")) guardBackend = v;
         else if (key.equals("guardJoinHint")) guardJoinHint = v;
+        else if (key.equals("sidePorts")) {
+            SidePorts.parse(v); // validate early
+            sidePorts = v;
+        } else if (key.equals("sidePortHook")) sidePortHook = v;
         else if (key.equals("commands")) commands = Boolean.parseBoolean(v);
         else if (key.equals("runtimeChecks")) runtimeChecks = Boolean.parseBoolean(v);
         else if (key.equals("serverJar")) serverJar = v;
@@ -264,6 +270,13 @@ final class Config {
                 + "guardBackend=\n"
                 + "# Shown to players who connect directly, e.g. play.example.com\n"
                 + "guardJoinHint=\n"
+                + "\n"
+                + "# Side ports: extra ports of this server (voice chat, maps, votes) that the gateway exposes on\n"
+                + "# public ports it assigns, as name:protocol:port, e.g. voice:udp:24454,map:tcp:8100.\n"
+                + "sidePorts=\n"
+                + "# Command run when an assignment changes (no shell; VECTA_SIDEPORT_* variables describe it),\n"
+                + "# e.g. ./hooks/simple-voice-chat.sh to set voice_host. See docs/side-ports.md.\n"
+                + "sidePortHook=\n"
                 + "\n"
                 + "# In-game /hub and /server <id> (move via the gateway) and /global <msg> (operators;\n"
                 + "# broadcast to every server). Handled at the network layer, so no plugin is needed.\n"

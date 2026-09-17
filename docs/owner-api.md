@@ -60,6 +60,7 @@ memory only; after a gateway restart the next heartbeat restores them.
 | `players` / `maxPlayers` | no | Informational. The gateway's status ping overwrites them every `healthInterval`. |
 | `hidden` | no | Not matched, not listed, not in menus. Still reachable by `<id>.<domain>`, sticky routing and transfer tickets. |
 | `proxyProtocol` | no | The gateway sends a PROXY v2 header (the real client address) on player connections and health pings. |
+| `sidePorts` | no | Extra ports to expose, e.g. voice chat: `[{"name":"voice","protocol":"udp","port":24454,"preferredPort":24500}]`. `name` is `[a-z0-9-]`, unique; `protocol` is `tcp` or `udp`; `port` is the backend port on the `address` host; `preferredPort` asks for a public port (usually the last one assigned). At most 16. The gateway ignores `public` and `error` in requests. See [side-ports.md](side-ports.md). |
 | `guard` | no | The backend only accepts connections signed by the gateway. The gateway sends a signed PROXY v2 header, keyed by the owner token, on player connections and health pings (instead of the plain one). See [guard-protocol.md](guard-protocol.md). |
 
 The request body is capped at 1 MiB.
@@ -68,13 +69,13 @@ The request body is capped at 1 MiB.
 
 | Code | Meaning |
 |---|---|
-| `200` | The stored server, including live state such as `online` and `versionName`. |
+| `200` | The stored server, including live state such as `online` and `versionName`. Each side port carries either `public` (`{"host","port"}`, where players reach it) or `error` (e.g. side ports are disabled, or no port is free). |
 | `400` | Invalid JSON, ID or limits. |
 | `401` | Bad token. |
 | `403` | Address not allowed for this owner. |
 | `409` | The ID is registered by another owner. |
 
-`DELETE /api/v1/servers/{id}` returns `204`, `404` (not registered) or `403` (another owner's server).
+`DELETE /api/v1/servers/{id}` releases the server's side ports and returns `204`, `404` (not registered) or `403` (another owner's server).
 
 ## Transfer a player (`/hub`, `/server <id>`)
 

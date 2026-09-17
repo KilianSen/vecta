@@ -117,6 +117,25 @@ disconnect message, and direct status pings show `guardJoinHint`.
 If the server itself expects PROXY protocol (`proxyProtocol=true`), the guard
 passes the player's real address on in a plain PROXY v2 header.
 
+## Side ports
+
+Mods with their own port (Simple Voice Chat, Plasmo Voice, Geyser, web maps,
+Votifier) aren't reachable through the gateway on their own. Declare them, and
+the gateway assigns each a public port and forwards it:
+
+```properties
+sidePorts=voice:udp:24454
+sidePortHook=./hooks/simple-voice-chat.sh
+```
+
+- **Hook:** runs whenever an assignment changes, with the public address in
+  `VECTA_SIDEPORT_HOST` / `VECTA_SIDEPORT_PORT`.
+- **Example:** [simple-voice-chat.sh](../../examples/sideport-hooks/simple-voice-chat.sh)
+  points `voice_host` at the gateway.
+- **Before start:** the jar registers once before the server starts, so a
+  fresh server needs no restart.
+- **Details:** [docs/side-ports.md](../../docs/side-ports.md).
+
 ## Settings
 
 | Key | Default | Meaning |
@@ -136,6 +155,8 @@ passes the player's real address on in a plain PROXY v2 header.
 | `guardListen` | `0.0.0.0:25565` | Public listener of the guard. |
 | `guardBackend` | `127.0.0.1:<server-port>` | Where the guard forwards to. |
 | `guardJoinHint` | | Address shown to players who connect directly. |
+| `sidePorts` | | `name:protocol:port,...` to expose through the gateway (see above). |
+| `sidePortHook` | | Command run when a side port assignment changes (no shell). |
 | `commands` | true | In-game `/hub`, `/server` and `/global` (see above). |
 | `runtimeChecks` | true | Ask the running server what loaded. |
 | `serverJar` | detected | Wrapper mode: the server jar. |

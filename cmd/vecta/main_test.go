@@ -30,9 +30,16 @@ func TestExampleConfigsParse(t *testing.T) {
 		t.Fatalf("hardening options parsed wrong: %+v", gw)
 	}
 
+	if lo, hi, err := gw.SidePorts.portRange(); err != nil || lo != 24500 || hi != 24599 {
+		t.Fatalf("sidePorts range: %d-%d %v", lo, hi, err)
+	}
+
 	var ag agentConfig
 	if err := loadJSON(repoFile(t, "examples", "agent.json"), &ag); err != nil {
 		t.Fatalf("examples/agent.json: %v", err)
+	}
+	if len(ag.Server.SidePorts) != 2 || len(ag.SidePortHook) != 1 {
+		t.Fatalf("agent side ports parsed wrong: %+v", ag)
 	}
 
 	var e2e gatewayConfig
@@ -84,12 +91,29 @@ func TestDeployTemplatesParse(t *testing.T) {
 	if gw.Domain != "play.example.com" || gw.Owners["admin"].Token != "o" || gw.DataFile != "/data/state.json" {
 		t.Fatalf("deploy gateway config: %+v", gw)
 	}
+	if lo, hi, err := gw.SidePorts.portRange(); err != nil || hi != 0 {
+		t.Fatalf("side ports must default to disabled: %d-%d %v", lo, hi, err)
+	}
 	var ag agentConfig
 	if err := loadJSON(repoFile(t, "deploy", "agent.json"), &ag); err != nil {
 		t.Fatalf("deploy/agent.json: %v", err)
 	}
 	if ag.Server.Address != "10.0.0.5:25565" || ag.Token != "t" {
 		t.Fatalf("deploy agent config: %+v", ag)
+	}
+}
+
+func TestSidePortRange(t *testing.T) {
+	for in, want := range map[string][2]int{"": {0, 0}, " ": {0, 0}, "24500-24599": {24500, 24599}, "30000": {30000, 30000}, " 1 - 2 ": {1, 2}} {
+		lo, hi, err := sidePortsConfig{Range: in}.portRange()
+		if err != nil || lo != want[0] || hi != want[1] {
+			t.Errorf("%q: %d-%d %v", in, lo, hi, err)
+		}
+	}
+	for _, in := range []string{"0-10", "10-5", "1-70000", "a-b", "-"} {
+		if _, _, err := (sidePortsConfig{Range: in}).portRange(); err == nil {
+			t.Errorf("%q: accepted", in)
+		}
 	}
 }
 

@@ -37,10 +37,11 @@ JAR_CHANGED=$($SSH "cmp -s /root/vecta-build/universal/build/vecta.jar $REMOTE/v
 $SSH "cp /root/vecta-build/universal/build/vecta.jar $REMOTE/vecta-jar/vecta.jar"
 
 step "deploy to $E2E_HOST:$REMOTE"
-$SSH "mkdir -p $REMOTE/hmc"
+$SSH "mkdir -p $REMOTE/hmc $REMOTE/hooks"
+scp -q "$ROOT"/examples/sideport-hooks/print.sh "$E2E_HOST:$REMOTE/hooks/"
 scp -q "$E2E"/{Dockerfile,compose.yaml,gateway.json,tune-paper.sh,vecta} "$E2E_HOST:$REMOTE/"
 scp -q "$E2E"/hmc/{Dockerfile,hmc-run.sh,scenarios.sh} "$E2E_HOST:$REMOTE/hmc/"
-$SSH "cd $REMOTE && sed -i 's/\r\$//' tune-paper.sh hmc/*.sh && docker build -q -t vecta-test/hmc:2.10.0 hmc >/dev/null && docker compose up -d --build --remove-orphans 2>&1 | tail -n 3"
+$SSH "cd $REMOTE && sed -i 's/\r\$//' tune-paper.sh hmc/*.sh hooks/*.sh &&docker build -q -t vecta-test/hmc:2.10.0 hmc >/dev/null && docker compose up -d --build --remove-orphans 2>&1 | tail -n 3"
 if [ -n "$JAR_CHANGED" ]; then
   echo "server jar changed; restarting the servers that load it"
   $SSH "cd $REMOTE && docker compose restart mc-paper-legacy mc-paper-via mc-fabric mc-neoforge mc-forge 2>&1 | tail -n 1"

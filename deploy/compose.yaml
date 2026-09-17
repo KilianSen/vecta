@@ -27,6 +27,10 @@ services:
     ports:
       - "${MC_PORT:-25565}:25565"   # Minecraft (NPM stream target)
       - "${API_PORT:-8080}:8080"    # owner API, status page, /metrics (NPM proxy host target)
+      # Side ports (voice chat, maps, ...), published directly: NPM streams
+      # cannot forward a port range. Must match VECTA_SIDEPORT_RANGE.
+      - "${VECTA_SIDEPORT_RANGE:-24500-24599}:${VECTA_SIDEPORT_RANGE:-24500-24599}/tcp"
+      - "${VECTA_SIDEPORT_RANGE:-24500-24599}:${VECTA_SIDEPORT_RANGE:-24500-24599}/udp"
     # Nginx Proxy Manager in Docker on the same host: remove "ports" above,
     # uncomment the networks below, and point NPM's stream at vecta:25565
     # and its proxy host at vecta:8080.

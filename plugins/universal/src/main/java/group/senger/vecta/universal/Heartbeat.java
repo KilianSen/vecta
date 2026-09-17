@@ -11,6 +11,7 @@ final class Heartbeat implements Runnable {
 
     private final Config cfg;
     private final GatewayClient gateway;
+    private final SidePorts sidePorts;
     private volatile boolean registered;
     private ModScanner.Result scan;
     private long scannedAt;
@@ -18,9 +19,28 @@ final class Heartbeat implements Runnable {
     private long probedAt;
     private String lastSummary = "";
 
-    Heartbeat(Config cfg) {
+    Heartbeat(Config cfg, SidePorts sidePorts) {
         this.cfg = cfg;
         this.gateway = new GatewayClient(cfg.gateway, cfg.token);
+        this.sidePorts = sidePorts;
+    }
+
+    /**
+     * Registers once before the server starts, so a side port hook can configure mods before they
+     * read their config. The server shows as offline until its health check passes.
+     */
+    void registerEarly() {
+        long start = System.currentTimeMillis();
+        try {
+            Map<String, Object> body = Report.build(cfg, ModScanner.scan(cfg.serverDir), null, null);
+            body.put("sidePorts", sidePorts.report());
+            sidePorts.apply(gateway.register(cfg.serverId, Json.write(body)), false);
+            Log.debug("early registration took " + (System.currentTimeMillis() - start) + " ms");
+        } catch (IOException e) {
+            Log.warn("early registration for side ports failed (" + e.getMessage() + "); retrying once the server is up");
+        } catch (RuntimeException e) {
+            Log.warn("early registration for side ports failed", e);
+        }
     }
 
     @Override
@@ -78,7 +98,9 @@ final class Heartbeat implements Runnable {
             probedAt = now;
         }
         Map<String, Object> body = Report.build(cfg, scan, runtime, ping);
-        gateway.register(cfg.serverId, Json.write(body));
+        if (sidePorts.active()) body.put("sidePorts", sidePorts.report());
+        String saved = gateway.register(cfg.serverId, Json.write(body));
+        if (sidePorts.active()) sidePorts.apply(saved, true);
 
         String summary = "loader " + body.get("loader") + ", " + ((List<?>) body.get("mods")).size() + " client mods, "
                 + ((List<?>) body.get("channels")).size() + " channels, protocols "

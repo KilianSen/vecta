@@ -14,7 +14,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"vecta/internal/netguard"
 	"vecta/internal/registry"
 	"vecta/internal/router"
+	"vecta/internal/sideport"
 	"vecta/internal/store"
 )
 
@@ -108,8 +111,38 @@ type gatewayConfig struct {
 	AllowLoopbackBackends bool     `json:"allowLoopbackBackends"`
 	MetricsToken          string   `json:"metricsToken"`
 
+	SidePorts sidePortsConfig `json:"sidePorts"`
+
 	Owners  map[string]ownerConfig `json:"owners"`
 	Servers []registry.Server      `json:"servers"`
+}
+
+// sidePortsConfig configures the public port pool for side ports
+// (docs/side-ports.md). An empty Range disables the feature.
+type sidePortsConfig struct {
+	Range           string   `json:"range"` // "24500-24599"
+	Listen          string   `json:"listen"`
+	PublicHost      string   `json:"publicHost"` // default: domain
+	UDPIdleTimeout  Duration `json:"udpIdleTimeout"`
+	ReleaseGrace    Duration `json:"releaseGrace"`
+	MaxUDPFlows     int      `json:"maxUdpFlows"`
+	MaxFlowsPerPort int      `json:"maxFlowsPerPort"`
+}
+
+func (c sidePortsConfig) portRange() (lo, hi int, err error) {
+	if strings.TrimSpace(c.Range) == "" {
+		return 0, 0, nil
+	}
+	a, b, ok := strings.Cut(c.Range, "-")
+	if !ok {
+		b = a
+	}
+	lo, err1 := strconv.Atoi(strings.TrimSpace(a))
+	hi, err2 := strconv.Atoi(strings.TrimSpace(b))
+	if err1 != nil || err2 != nil || lo < 1 || hi > 65535 || lo > hi {
+		return 0, 0, fmt.Errorf("range %q must be \"low-high\" within 1-65535", c.Range)
+	}
+	return lo, hi, nil
 }
 
 type agentConfig struct {
@@ -118,6 +151,10 @@ type agentConfig struct {
 	Interval Duration        `json:"interval"`
 	ModsDir  string          `json:"modsDir"`
 	Server   registry.Server `json:"server"`
+	// SidePortHook is the callback for side port changes (argv, no shell).
+	SidePortHook []string `json:"sidePortHook"`
+	// StateFile defaults to vecta-sideports.json next to the config.
+	StateFile string `json:"stateFile"`
 }
 
 func main() {
@@ -154,9 +191,14 @@ func main() {
 	case "agent":
 		var cfg agentConfig
 		if err = loadJSON(*configPath, &cfg); err == nil {
+			stateFile := cfg.StateFile
+			if stateFile == "" {
+				stateFile = filepath.Join(filepath.Dir(*configPath), "vecta-sideports.json")
+			}
 			err = agent.Run(ctx, agent.Config{
 				Gateway: cfg.Gateway, Token: cfg.Token, Interval: time.Duration(cfg.Interval),
 				ModsDir: cfg.ModsDir, Server: cfg.Server,
+				SidePortHook: cfg.SidePortHook, StateFile: stateFile,
 			}, log)
 		}
 	default:
@@ -291,16 +333,19 @@ func runGateway(ctx context.Context, cfg gatewayConfig, log *slog.Logger) error 
 	defaultPolicy := netguard.Policy{Allowed: globalNets, AllowLoopback: cfg.AllowLoopbackBackends}
 	// Static servers come from the admin's config and are dialed directly;
 	// owner-registered ones go through their owner's policy on every dial.
-	dial := func(ctx context.Context, s registry.Server) (net.Conn, error) {
+	dialBackend := func(ctx context.Context, s registry.Server, network, address string) (net.Conn, error) {
 		if s.Static {
 			var d net.Dialer
-			return d.DialContext(ctx, "tcp", s.Address)
+			return d.DialContext(ctx, network, address)
 		}
 		policy, ok := policies[s.Owner]
 		if !ok {
 			policy = defaultPolicy
 		}
-		return policy.DialContext(ctx, "tcp", s.Address)
+		return policy.DialContext(ctx, network, address)
+	}
+	dial := func(ctx context.Context, s registry.Server) (net.Conn, error) {
+		return dialBackend(ctx, s, "tcp", s.Address)
 	}
 	guardKeys := map[string][]byte{}
 	for name, o := range cfg.Owners {
@@ -333,13 +378,46 @@ func runGateway(ctx context.Context, cfg gatewayConfig, log *slog.Logger) error 
 	go st.Run(ctx, 30*time.Second, func(err error) { log.Warn("state flush failed", "err", err) })
 
 	reg := registry.New()
-	for _, s := range cfg.Servers {
-		if _, err := reg.Upsert("static", s, 0); err != nil {
-			return fmt.Errorf("static server %q: %w", s.ID, err)
-		}
+	m := metrics.New()
+
+	lo, hi, err := cfg.SidePorts.portRange()
+	if err != nil {
+		return fmt.Errorf("sidePorts: %w", err)
+	}
+	publicHost := cfg.SidePorts.PublicHost
+	if publicHost == "" {
+		publicHost = cfg.Domain
+	}
+	if hi > 0 && publicHost == "" {
+		return errors.New("sidePorts: set publicHost or domain")
+	}
+	sidePorts := sideport.New(sideport.Config{
+		Listen:          cfg.SidePorts.Listen,
+		PublicHost:      publicHost,
+		MinPort:         lo,
+		MaxPort:         hi,
+		UDPIdle:         time.Duration(cfg.SidePorts.UDPIdleTimeout),
+		ReleaseGrace:    time.Duration(cfg.SidePorts.ReleaseGrace),
+		MaxUDPFlows:     cfg.SidePorts.MaxUDPFlows,
+		MaxFlowsPerPort: cfg.SidePorts.MaxFlowsPerPort,
+		Registry:        reg,
+		Dial:            dialBackend,
+		Metrics:         m,
+		Log:             log,
+	})
+	go sidePorts.Run(ctx, 5*time.Second)
+	if hi > 0 {
+		log.Info("side ports enabled", "range", cfg.SidePorts.Range, "publicHost", publicHost)
 	}
 
-	m := metrics.New()
+	for _, s := range cfg.Servers {
+		saved, err := reg.Upsert("static", s, 0)
+		if err != nil {
+			return fmt.Errorf("static server %q: %w", s.ID, err)
+		}
+		sidePorts.Sync(saved)
+	}
+
 	m.GaugeFunc("vecta_servers_registered", "Registered servers", func() float64 { return float64(len(reg.List())) })
 	m.GaugeFunc("vecta_servers_online", "Servers passing health checks", func() float64 { return float64(len(reg.Online())) })
 
@@ -395,6 +473,7 @@ func runGateway(ctx context.Context, cfg gatewayConfig, log *slog.Logger) error 
 				go registry.CheckOne(ctx, reg, s, backend, log)
 			},
 			Tickets:      rt,
+			SidePorts:    sidePorts,
 			Metrics:      m,
 			MetricsToken: cfg.MetricsToken,
 			Log:          log,

@@ -34,6 +34,9 @@ type Server struct {
 	// owner token, or GuardSecret for static servers.
 	Guard       bool   `json:"guard,omitempty"`
 	GuardSecret string `json:"guardSecret,omitempty"`
+	// SidePorts are extra backend ports (voice chat, maps, ...) the gateway
+	// exposes on ports it assigns (docs/side-ports.md).
+	SidePorts []SidePort `json:"sidePorts,omitempty"`
 
 	// Reported by the server jar or agent (see docs/owner-api.md).
 	Reporter    string            `json:"reporter,omitempty"`
@@ -65,6 +68,28 @@ type Channel struct {
 	Required bool `json:"required,omitempty"`
 }
 
+// SidePort is an extra backend port that the gateway forwards from a public
+// port it assigns. Public and Error are set by the gateway only.
+type SidePort struct {
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"` // tcp or udp
+	Port     int    `json:"port"`     // backend port; the host comes from Address
+	// PreferredPort asks for a public port, typically the last one assigned,
+	// so assignments survive gateway restarts when the port is still free.
+	PreferredPort int         `json:"preferredPort,omitempty"`
+	Public        *PublicAddr `json:"public,omitempty"`
+	Error         string      `json:"error,omitempty"`
+}
+
+// PublicAddr is where players reach a side port.
+type PublicAddr struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
+// MaxSidePorts caps side ports per server.
+const MaxSidePorts = 16
+
 // Accepts reports whether a client protocol is accepted: by the exact
 // protocols list if reported, else by the declared range. With neither, the
 // server accepts exactly the protocol its ping reports.
@@ -94,6 +119,7 @@ var (
 	ErrNotFound = errors.New("server not found")
 	ErrConflict = errors.New("server id owned by another owner")
 	idPattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+	sideName    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 )
 
 // ReservedIDs cannot be registered because they are gateway subdomains.
@@ -130,6 +156,33 @@ func Validate(s *Server) error {
 	}
 	for i := range s.Channels {
 		s.Channels[i].Name = strings.ToLower(s.Channels[i].Name)
+	}
+	return validateSidePorts(s.SidePorts)
+}
+
+func validateSidePorts(ports []SidePort) error {
+	if len(ports) > MaxSidePorts {
+		return fmt.Errorf("at most %d side ports", MaxSidePorts)
+	}
+	seen := map[string]bool{}
+	for i := range ports {
+		p := &ports[i]
+		p.Name = strings.ToLower(strings.TrimSpace(p.Name))
+		p.Protocol = strings.ToLower(strings.TrimSpace(p.Protocol))
+		p.Public, p.Error = nil, ""
+		switch {
+		case !sideName.MatchString(p.Name):
+			return fmt.Errorf("side port name must match %s", sideName)
+		case seen[p.Name]:
+			return fmt.Errorf("duplicate side port %q", p.Name)
+		case p.Protocol != "tcp" && p.Protocol != "udp":
+			return fmt.Errorf("side port %q: protocol must be tcp or udp", p.Name)
+		case p.Port < 1 || p.Port > 65535:
+			return fmt.Errorf("side port %q: port out of range", p.Name)
+		case p.PreferredPort < 0 || p.PreferredPort > 65535:
+			return fmt.Errorf("side port %q: preferredPort out of range", p.Name)
+		}
+		seen[p.Name] = true
 	}
 	return nil
 }
@@ -256,6 +309,23 @@ func (r *Registry) SetHealth(id, address string, h Health) {
 		}
 		s.ForgeChannels, s.ForgeChannelsTruncated = h.ForgeChannels, h.ForgeChannelsTruncated
 	}
+}
+
+// SetSidePorts stores the gateway's assignments for a server, if it is still
+// registered with the same side ports.
+func (r *Registry) SetSidePorts(id string, ports []SidePort) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.servers[id]
+	if !ok || len(s.SidePorts) != len(ports) {
+		return
+	}
+	for i := range ports {
+		if s.SidePorts[i].Name != ports[i].Name {
+			return
+		}
+	}
+	s.SidePorts = append([]SidePort(nil), ports...)
 }
 
 // Prune deletes expired registrations.

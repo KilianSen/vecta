@@ -41,7 +41,18 @@ final class Vecta {
             Log.warn("not registering: " + problem + " (edit " + cfg.file + ")");
             return;
         }
-        Thread t = new Thread(new Heartbeat(cfg), "vecta-heartbeat");
+        SidePorts sidePorts;
+        try {
+            sidePorts = new SidePorts(cfg);
+        } catch (RuntimeException e) {
+            Log.warn("side ports disabled: " + e.getMessage());
+            cfg.sidePorts = "";
+            sidePorts = new SidePorts(cfg);
+        }
+        Heartbeat heartbeat = new Heartbeat(cfg, sidePorts);
+        // Both entry points run before the server's main, so the hook can still edit mod configs.
+        if (!sidePorts.declared.isEmpty()) heartbeat.registerEarly();
+        Thread t = new Thread(heartbeat, "vecta-heartbeat");
         t.setDaemon(true);
         t.start();
     }

@@ -1,6 +1,7 @@
 # End-to-end test stack: gateway and 8 real servers. Six register themselves
 # with the vecta server jar (five as a Java agent — one of them hidden — and one
-# in wrapper mode behind the guard), two are static in the gateway config.
+# in wrapper mode behind the guard), two are static in the gateway config, and
+# an echo container backs the side port scenario.
 # Normally driven by test/e2e/run.sh, which copies this directory to the Docker
 # host and runs, there:
 #   docker compose up -d --build
@@ -35,6 +36,8 @@ services:
     ports:
       - "35565:25565"
       - "38080:8080"
+      - "34500-34509:34500-34509/tcp"
+      - "34500-34509:34500-34509/udp"
     networks:
       default:
         # Real clients inside the network join by name, like players would.
@@ -49,6 +52,14 @@ services:
           - neo-pack.play.test
           - forge-pack.play.test
           - paper-plugin.play.test
+
+  # Echo backend for side ports: static server "echo" in gateway.json exposes
+  # UDP 7000 and TCP 7001 through the gateway's side port pool.
+  echo:
+    image: alpine/socat:latest
+    labels: [vecta-test=true]
+    restart: unless-stopped
+    entrypoint: ["sh", "-c", "socat UDP-LISTEN:7000,fork EXEC:cat & exec socat TCP-LISTEN:7001,fork,reuseaddr EXEC:cat"]
 
   # L: Paper 1.8.8 on Java 8. vecta.jar in wrapper mode starts the Paper jar
   # (detected in /data) and guards it: the guard takes port 25565, Paper moves
@@ -125,9 +136,13 @@ services:
       VECTA_NAME: Fabric 1.21.1 pack
       VECTA_ADDRESS: mc-fabric:25565
       VECTA_REQUIRED_CLIENT_MODS: appleskin
+      # A side port with the print hook (writes /data/sideports.txt).
+      VECTA_SIDE_PORTS: voice:udp:24454
+      VECTA_SIDE_PORT_HOOK: sh /hooks/print.sh
     volumes:
       - fabric-data:/data
       - ./vecta-jar:/vecta:ro
+      - ./hooks:/hooks:ro
 
   # E: NeoForge 1.21.1 modpack, jar (agent mode via user_jvm_args.txt)
   mc-neoforge:
