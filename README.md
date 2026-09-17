@@ -388,10 +388,21 @@ CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)):
     jar's `packets.json`)
 - **Jar:** the server jar is built (Java 8 bytecode) and its self-test run; the
   jar is uploaded as an artifact.
-- **Image:** the multi-arch Docker image (amd64, arm64) is built on every push.
-  `v*` tags publish it to `ghcr.io/<owner>/<repo>` as `<version>` and `latest`.
+- **Image:** branches and pull requests build the multi-arch Docker image
+  (amd64, arm64) as a check.
 - **Nightly and on demand:** the full e2e run, on a self-hosted runner labeled
   `vecta-e2e` that can reach the Docker host.
+
+Releases ([.github/workflows/release.yml](.github/workflows/release.yml)):
+- **Every push to master** publishes `ghcr.io/kiliansen/vecta:master` (and
+  `:sha-<commit>`).
+- **Versions** come from [release-please](https://github.com/googleapis/release-please):
+  it keeps a release PR up to date from Conventional Commits (`feat:`, `fix:`,
+  `feat!:` for breaking changes). Merging the PR tags `vX.Y.Z`, writes
+  `CHANGELOG.md` and creates the GitHub release.
+- **Each release** publishes the image as `:X.Y.Z`, `:X.Y` and `:latest`, and
+  attaches `vecta.jar`, the `vecta` binaries (linux, macOS, Windows) and
+  `SHA256SUMS`.
 
 Regenerate the limbo tables and the jar's `packets.json` after a minecraft-data
 update with `python tools/limbogen/gen.py [cache-dir]`.

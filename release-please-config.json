@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "2d30e10e705701b017e1548213367aadcc4b19ba",
+  "packages": {
+    ".": {
+      "release-type": "go",
+      "package-name": "vecta",
+      "initial-version": "0.1.0",
+      "include-component-in-tag": false,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["plugins/universal/build.sh"]
+    }
+  }
+}

@@ -3,7 +3,7 @@
 # Needs a JDK 11+ on PATH; without one it runs itself in the eclipse-temurin image.
 set -eu
 cd "$(dirname "$0")"
-VERSION=${VERSION:-0.1.0}
+VERSION=${VERSION:-0.1.0} # x-release-please-version
 
 if ! command -v javac >/dev/null 2>&1; then
   exec docker run --rm --label vecta-build -v "$PWD":/src -w /src -e VERSION="$VERSION" \
