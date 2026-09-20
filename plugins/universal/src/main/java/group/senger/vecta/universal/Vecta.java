@@ -61,7 +61,9 @@ final class Vecta {
      * Waits for the server's Netty to bind in this JVM, then installs the /hub, /server and /global
      * handlers. If the server comes up (answers a local ping) but never appears in this JVM's Netty,
      * it is running in a separate process — a launcher started it, not us — or on an unrecognized
-     * framework; warn once and stop, since the in-JVM hook can't reach it.
+     * framework; warn once and stop, since the in-JVM hook can't reach it. Netty event loops running
+     * here mean the server is in this JVM after all and discovery is what failed, which the warning
+     * then says instead.
      */
     private static void startCommands(final Config cfg) {
         Thread t = new Thread(new Runnable() {
@@ -76,12 +78,19 @@ final class Vecta {
                             serverUpAt = System.currentTimeMillis();
                         }
                         // For an in-JVM server the ping only succeeds once Netty is listening, so a
-                        // successful ping with no server channel here means it is not in this JVM.
+                        // successful ping with no server channel here means either that it is not in
+                        // this JVM, or that its Netty is laid out in a way discovery does not know.
                         if (serverUpAt != 0 && System.currentTimeMillis() - serverUpAt > 20_000) {
-                            Log.warn("commands could not attach: the server is running but its network is not "
-                                    + "reachable from this JVM (it was likely started in a separate process by a "
-                                    + "launcher, or runs an unrecognized framework). /hub, /server and /global are off. "
-                                    + "To enable them, start the server itself with -javaagent:vecta.jar.");
+                            if (Netty.hasEventLoops()) {
+                                Log.warn("commands could not attach: the server is running in this JVM but vecta could "
+                                        + "not find its network listener (" + Netty.counts() + "). /hub, /server and "
+                                        + "/global are off. Please report this with debug=true in " + cfg.file + ".");
+                            } else {
+                                Log.warn("commands could not attach: the server is running but its network is not "
+                                        + "reachable from this JVM (it was likely started in a separate process by a "
+                                        + "launcher, or runs an unrecognized framework). /hub, /server and /global are "
+                                        + "off. To enable them, start the server itself with -javaagent:vecta.jar.");
+                            }
                             return;
                         }
                         if (i % 10 == 5) {
