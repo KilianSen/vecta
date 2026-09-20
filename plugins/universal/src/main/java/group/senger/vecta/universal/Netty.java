@@ -2,6 +2,7 @@ package group.senger.vecta.universal;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -13,6 +14,9 @@ import java.util.Set;
  * survive obfuscation, so once we hold a channel we can work with it by those names. Getting the
  * first reference is the hard part: we walk the Netty event-loop threads to their event loops and
  * read the channels registered on them (NIO selector keys, or the epoll channel map on Linux).
+ * Netty 4.2 (Minecraft 1.21.11 and newer) moved those registrations off the event loop into an
+ * IoHandler it holds, and made a selector key point at an IoRegistration instead of the channel, so
+ * both layouts are handled here.
  *
  * <p>Everything here is best-effort and version-sensitive on Netty internals; every step is guarded
  * and a failure just yields fewer channels.
@@ -23,8 +27,13 @@ final class Netty {
 
     /** The server's listen (parentless) channels, where the child-connection handler lives. */
     static List<Object> serverChannels() {
+        return serverChannelsOn(eventLoops());
+    }
+
+    /** The listen channels registered on the given event loops. */
+    static List<Object> serverChannelsOn(List<Object> loops) {
         Set<Object> raw = java.util.Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
-        for (Object loop : eventLoops()) {
+        for (Object loop : loops) {
             try {
                 channelsOf(loop, raw);
             } catch (Throwable ignored) {
@@ -44,37 +53,51 @@ final class Netty {
 
     /** For diagnostics: how many event loops and server channels discovery currently finds. */
     static String counts() {
-        int loops = eventLoops().size();
-        return "loops=" + loops + " serverChannels=" + serverChannels().size();
+        List<Object> loops = eventLoops();
+        Set<String> kinds = new java.util.TreeSet<String>();
+        for (Object loop : loops) kinds.add(loop.getClass().getName());
+        return "loops=" + loops.size() + kinds + " serverChannels=" + serverChannelsOn(loops).size();
     }
 
-    /** For diagnostics: each event loop's channel-holding fields and how many channels are extracted. */
+    /** Whether this JVM runs any Netty event loop at all (so a server could be in it). */
+    static boolean hasEventLoops() {
+        return !eventLoops().isEmpty();
+    }
+
+    /**
+     * For diagnostics: each event loop's (and, on Netty 4.2, its IoHandler's) channel-holding fields
+     * and how many channels are extracted.
+     */
     static void dumpLoops() {
         for (Object loop : eventLoops()) {
-            StringBuilder sb = new StringBuilder(loop.getClass().getName()).append(" fields:");
-            for (Field f : declaredFields(loop)) {
-                String tn = f.getType().getName();
-                if (tn.contains("Map") || tn.contains("Selector") || f.getType().isArray() || tn.contains("Channel")) {
-                    Object v = RuntimeProbe.read(f, loop);
-                    sb.append(' ').append(f.getName()).append('(').append(f.getType().getSimpleName()).append(')');
-                    if (v != null) {
-                        try {
-                            Object vals = RuntimeProbe.call(v, "values");
-                            sb.append("=values:").append(vals == null ? "null" : vals.getClass().getSimpleName());
-                        } catch (Throwable t) {
-                            sb.append("=novalues");
-                        }
+            for (Object holder : holders(loop)) dumpFields(holder);
+        }
+    }
+
+    private static void dumpFields(Object holder) {
+        StringBuilder sb = new StringBuilder(holder.getClass().getName()).append(" fields:");
+        for (Field f : declaredFields(holder)) {
+            String tn = f.getType().getName();
+            if (tn.contains("Map") || tn.contains("Selector") || f.getType().isArray() || tn.contains("Channel")) {
+                Object v = RuntimeProbe.read(f, holder);
+                sb.append(' ').append(f.getName()).append('(').append(f.getType().getSimpleName()).append(')');
+                if (v != null) {
+                    try {
+                        Object vals = RuntimeProbe.call(v, "values");
+                        sb.append("=values:").append(vals == null ? "null" : vals.getClass().getSimpleName());
+                    } catch (Throwable t) {
+                        sb.append("=novalues");
                     }
                 }
             }
-            Set<Object> chs = java.util.Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
-            try {
-                channelsOf(loop, chs);
-            } catch (Throwable ignored) {
-                // nothing
-            }
-            Log.debug(sb + " -> channels=" + chs.size());
         }
+        Set<Object> chs = java.util.Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+        try {
+            registeredOn(holder, chs);
+        } catch (Throwable ignored) {
+            // nothing
+        }
+        Log.debug(sb + " -> channels=" + chs.size());
     }
 
     /** Finds the Netty event-loop objects by walking their threads. */
@@ -120,7 +143,8 @@ final class Netty {
     /** An event loop we can read channels from: a Netty NIO or epoll single-thread executor. */
     private static boolean isEventLoop(Object o) {
         String cn = o.getClass().getName();
-        // NioEventLoop, EpollEventLoop, KQueueEventLoop, ... but not the *EventLoopGroup wrappers.
+        // NioEventLoop, EpollEventLoop, KQueueEventLoop, SingleThreadIoEventLoop (Netty 4.2), ...
+        // but not the *EventLoopGroup wrappers.
         return cn.startsWith("io.netty.") && cn.endsWith("EventLoop");
     }
 
@@ -143,26 +167,56 @@ final class Netty {
         return task;
     }
 
-    /** Adds every channel registered on one event loop to out. */
+    /**
+     * Adds every channel registered on one event loop to out. Netty 4.1 keeps the selector and the
+     * channel map on the event loop itself; Netty 4.2 moved them into an IoHandler the loop holds,
+     * so read both.
+     */
     private static void channelsOf(Object loop, Set<Object> out) throws Exception {
         int before = out.size();
-        // NIO: the (possibly wrapped) Selector's registered keys carry the channel as attachment.
-        Object selector = field(loop, "selector");
-        if (selector == null) selector = field(loop, "unwrappedSelector");
+        List<Object> holders = holders(loop);
+        for (Object holder : holders) {
+            try {
+                registeredOn(holder, out);
+            } catch (Throwable ignored) {
+                // skip this holder
+            }
+        }
+        // Field names drift across Netty versions; if nothing turned up, scan any map field.
+        if (out.size() == before) {
+            for (Object holder : holders) {
+                for (Field f : declaredFields(holder)) {
+                    if (f.getType().getName().contains("Map")) addFromMap(RuntimeProbe.read(f, holder), out);
+                }
+            }
+        }
+    }
+
+    /** Where an event loop's registrations live: the loop itself and, on Netty 4.2, its IoHandler. */
+    private static List<Object> holders(Object loop) {
+        List<Object> out = new ArrayList<Object>();
+        out.add(loop);
+        Object handler = field(loop, "ioHandler"); // Netty 4.2 SingleThreadIoEventLoop
+        if (handler != null) out.add(handler);
+        return out;
+    }
+
+    /** Adds the channels one event loop or IoHandler has registered to out. */
+    private static void registeredOn(Object holder, Set<Object> out) throws Exception {
+        // NIO: the (possibly wrapped) Selector's registered keys carry the channel as attachment
+        // (Netty 4.1) or its IoRegistration (4.2).
+        Object selector = field(holder, "selector");
+        if (selector == null) selector = field(holder, "unwrappedSelector");
         if (selector instanceof java.nio.channels.Selector) {
             for (java.nio.channels.SelectionKey key : ((java.nio.channels.Selector) selector).keys()) {
                 addChannel(key.attachment(), out);
             }
         }
-        // Epoll/KQueue keep a channel map: "channels" (Netty 4.1) or "ids" (Netty 4.0).
-        addFromMap(field(loop, "channels"), out);
-        addFromMap(field(loop, "ids"), out);
-        // Field names drift across Netty versions; if nothing turned up, scan any map field.
-        if (out.size() == before) {
-            for (Field f : declaredFields(loop)) {
-                if (f.getType().getName().contains("Map")) addFromMap(RuntimeProbe.read(f, loop), out);
-            }
-        }
+        // Epoll/KQueue keep a channel map: "channels" (Netty 4.1) or "ids" (Netty 4.0); their 4.2
+        // IoHandlers keep "registrations".
+        addFromMap(field(holder, "channels"), out);
+        addFromMap(field(holder, "ids"), out);
+        addFromMap(field(holder, "registrations"), out);
     }
 
     /** Adds the channel-like values of a Netty IntObjectMap/Map to out. Handles both a Collection
@@ -201,8 +255,50 @@ final class Netty {
         return out;
     }
 
-    private static void addChannel(Object ch, Set<Object> out) {
-        if (ch != null && ch.getClass().getName().contains("Channel")) out.add(ch);
+    private static void addChannel(Object o, Set<Object> out) {
+        Object ch = channelOf(o);
+        if (ch != null) out.add(ch);
+    }
+
+    /** Fields a Netty wrapper keeps its channel in, in the order they are tried. */
+    private static final String[] WRAPPED = {"handle", "channel", "ch", "this$0"};
+
+    /**
+     * The channel behind a selector attachment or registration-map value. On Netty 4.1 that is the
+     * channel itself; on 4.2 it is an IoRegistration holding an IoHandle, which for a channel is the
+     * channel's own inner Unsafe — so follow those fields (the Unsafe's synthetic outer reference
+     * included) until a channel turns up.
+     */
+    private static Object channelOf(Object o) {
+        Set<Object> seen = java.util.Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+        java.util.Deque<Object> queue = new java.util.ArrayDeque<Object>();
+        if (o != null) queue.add(o);
+        for (int steps = 0; !queue.isEmpty() && steps < 16; steps++) {
+            Object v = queue.poll();
+            if (v == null || !seen.add(v)) continue;
+            if (isChannel(v)) return v;
+            for (String name : WRAPPED) {
+                Object next = field(v, name);
+                if (next != null && !seen.contains(next)) queue.add(next);
+            }
+        }
+        return null;
+    }
+
+    /** Whether an object is a Netty channel rather than a wrapper around one. */
+    private static boolean isChannel(Object o) {
+        java.util.Deque<Class<?>> queue = new java.util.ArrayDeque<Class<?>>();
+        Set<Class<?>> seen = new java.util.HashSet<Class<?>>();
+        queue.add(o.getClass());
+        while (!queue.isEmpty()) {
+            Class<?> k = queue.poll();
+            if (k == null || !seen.add(k)) continue;
+            // endsWith, not equals: 1.7.x era servers relocate Netty into their own package.
+            if (k.getName().endsWith("io.netty.channel.Channel")) return true;
+            if (k.getSuperclass() != null) queue.add(k.getSuperclass());
+            queue.addAll(Arrays.asList(k.getInterfaces()));
+        }
+        return false;
     }
 
     private static Object field(Object o, String name) {

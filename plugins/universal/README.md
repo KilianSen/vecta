@@ -94,10 +94,11 @@ How it works: the jar splices a handler into each connection's Netty pipeline
 (after decryption/decompression) using only Netty's stable, string-named
 handlers, reads the protocol and player from the handshake, and catches the
 chat/command packet. Packet IDs per version come from a generated table
-(`packets.json`). This needs Netty 4.1, i.e. **Minecraft 1.12+** for the
-epoll/`ids` map layout — 1.8–1.11 also work. If the jar can't attach (an
-unusual server), it logs a warning and everything else still works; players use
-`lobby.<domain>` and `<id>.<domain>` instead.
+(`packets.json`). Every Netty layout is handled: the `ids` map on the event loop
+(4.0, Minecraft 1.8-1.11), the selector and `channels` map on it (4.1, 1.12+),
+and the IoHandler that now holds both (4.2, 1.21.11+). If the jar can't attach
+(an unusual server), it logs a warning and everything else still works; players
+use `lobby.<domain>` and `<id>.<domain>` instead.
 
 ## Guard
 

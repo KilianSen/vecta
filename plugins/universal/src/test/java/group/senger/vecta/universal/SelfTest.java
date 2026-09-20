@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import io.netty.channel.fake.Fakes;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -11,9 +12,13 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +45,7 @@ public final class SelfTest {
         run("config parsing", SelfTest::config);
         run("side port declarations and hooks", SelfTest::sidePorts);
         run("status ping", SelfTest::statusPing);
+        run("netty channel discovery", SelfTest::nettyLayouts);
         run("guard proxy end to end", SelfTest::guardProxy);
         if (failures > 0) {
             System.out.println(failures + " test(s) FAILED");
@@ -382,6 +388,56 @@ public final class SelfTest {
         } finally {
             in.close();
         }
+    }
+
+    /**
+     * Channel discovery finds the listen channel in both Netty layouts: 4.1, where the event loop
+     * holds the selector and the channel map, and 4.2 (Minecraft 1.21.11 and newer), where an
+     * IoHandler holds them and registrations stand between a key and its channel.
+     */
+    private static void nettyLayouts() throws Exception {
+        Fakes.ServerSocketChannel listen = new Fakes.ServerSocketChannel();
+        Fakes.SocketChannel player = new Fakes.SocketChannel(listen);
+        List<Selector> open = new ArrayList<Selector>();
+        try {
+            // Netty 4.1: the key is attached to the channel, the epoll loop maps fd to channel.
+            expectListen("4.1 nio", listen, new Fakes.NioEventLoop(selectorOf(open, listen, player)));
+            expectListen("4.1 epoll", listen, new Fakes.EpollEventLoop(byFd(listen, player)));
+
+            // Netty 4.2: the key is attached to an IoRegistration whose handle is the channel's
+            // inner Unsafe, and both live on the loop's IoHandler.
+            Object nio = new Fakes.NioIoHandler(selectorOf(open,
+                    new Fakes.IoRegistration(listen.unsafe), new Fakes.IoRegistration(player.unsafe)));
+            expectListen("4.2 nio", listen, new Fakes.SingleThreadIoEventLoop(nio));
+            Object epoll = new Fakes.EpollIoHandler(byFd(
+                    new Fakes.IoRegistration(listen.unsafe), new Fakes.IoRegistration(player.unsafe)));
+            expectListen("4.2 epoll", listen, new Fakes.SingleThreadIoEventLoop(epoll));
+        } finally {
+            for (Selector s : open) s.close();
+        }
+    }
+
+    private static void expectListen(String layout, Object want, Object loop) {
+        List<Object> found = Netty.serverChannelsOn(Collections.singletonList(loop));
+        check(found.size() == 1 && found.get(0) == want, layout + ": found " + found);
+    }
+
+    /** A selector with one key per attachment, as Netty's event loop would have. */
+    private static Selector selectorOf(List<Selector> open, Object... attachments) throws IOException {
+        Selector selector = Selector.open();
+        open.add(selector);
+        for (Object attachment : attachments) {
+            java.nio.channels.ServerSocketChannel ch = java.nio.channels.ServerSocketChannel.open();
+            ch.configureBlocking(false);
+            ch.register(selector, SelectionKey.OP_ACCEPT, attachment);
+        }
+        return selector;
+    }
+
+    private static Map<Integer, Object> byFd(Object... values) {
+        Map<Integer, Object> out = new java.util.HashMap<Integer, Object>();
+        for (Object v : values) out.put(out.size(), v);
+        return out;
     }
 
     private static void statusPing() throws Exception {
